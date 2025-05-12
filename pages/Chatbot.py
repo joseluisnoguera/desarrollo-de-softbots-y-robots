@@ -1,17 +1,10 @@
 import utils
 import streamlit as st
 
-# --- Nuevos Imports para Agente ---
-from langchain.agents import AgentExecutor, create_react_agent, Tool
-from langchain import hub
+from langchain.agents import AgentExecutor, create_react_agent
 from langchain.tools.retriever import create_retriever_tool
-from langchain_core.prompts import PromptTemplate # Para el prompt personalizado del agente
-# --- Fin Nuevos Imports ---
-
+from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables.history import RunnableWithMessageHistory
-from langchain_core.runnables import RunnablePassthrough
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, SystemMessagePromptTemplate, HumanMessagePromptTemplate
-from langchain_core.messages import AIMessage, HumanMessage
 from langchain_community.chat_message_histories import StreamlitChatMessageHistory
 from langchain.schema import format_document
 
@@ -33,25 +26,20 @@ class BasicChatbot:
         utils.sync_st_session()
         self.llm = utils.configure_llm()
         self.retriever = utils.get_retriever()
-        # --- Obtener Herramienta de Búsqueda ---
         self.web_search_tool = utils.get_web_search_tool()
-        # --- Fin Obtener Herramienta ---
 
     def setup_chain(self):
-        # --- Configuración del Agente con RAG y Búsqueda Web ---
         tools = []
         if self.retriever:
-            # Crear herramienta para el retriever RAG
             retriever_tool = create_retriever_tool(
                 self.retriever,
-                "search_private_documents", # Nombre de la herramienta
+                "search_private_documents",
                 "Busca y devuelve extractos relevantes de documentos internos del negocio sobre servicios de turismo, costos e información interna. Úsala primero si la pregunta parece sobre información específica del negocio." # Descripción para el agente
             )
             tools.append(retriever_tool)
 
         if self.web_search_tool:
-            # Añadir herramienta de búsqueda web
-            self.web_search_tool.name = "duckduckgo_search" # Asegurar nombre consistente
+            self.web_search_tool.name = "duckduckgo_search"
             self.web_search_tool.description = "Un motor de búsqueda. Útil cuando necesitas responder preguntas sobre eventos actuales, conocimiento general o temas de turismo no cubiertos en los documentos privados. La entrada debe ser una consulta de búsqueda."
             tools.append(self.web_search_tool)
 
@@ -89,89 +77,64 @@ New Question: {input}
 {agent_scratchpad}
 """
         prompt = PromptTemplate.from_template(agent_prompt_template)
-        # --- Fin Prompt Personalizado ---
 
-        # Crear el agente ReAct con el prompt personalizado
         agent = create_react_agent(self.llm, tools, prompt)
 
-        # Crear el ejecutor del agente
         agent_executor = AgentExecutor(
             agent=agent,
             tools=tools,
-            verbose=True, # Muestra los pasos del agente en la consola
-            handle_parsing_errors=True, # Intenta manejar errores de parseo
-            max_iterations=5 # Limita el número de pasos
+            verbose=True,
+            handle_parsing_errors=True,
+            max_iterations=5
         )
 
-        # Define get_session_history function for RunnableWithMessageHistory
         def get_session_history(session_id):
-            # Usar clave única para el historial del agente
             return StreamlitChatMessageHistory(key=f"agent_history_{session_id}")
 
-        # Envolver el ejecutor del agente con historial
         agent_with_history = RunnableWithMessageHistory(
             agent_executor,
             get_session_history,
             input_messages_key="input",
-            history_messages_key="chat_history", # Clave usada en nuestro prompt personalizado
-            # Asegúrate de que las claves coincidan con las del prompt del agente
+            history_messages_key="chat_history",
         )
 
         return agent_with_history
-        # --- Fin Configuración del Agente ---
 
     @utils.enable_chat_history
     def main(self):
-        agent_runnable = self.setup_chain() # Ahora es un agente
+        agent_runnable = self.setup_chain()
 
         if not agent_runnable:
              st.warning("El agente no pudo ser inicializado.")
              return
 
-        # 1. Mostrar historial existente PRIMERO
-        # Nota: El historial del agente puede gestionarse de forma diferente.
-        # Usamos st.session_state["messages"] como antes para simplificar la visualización.
         for msg in st.session_state.get("messages", []):
             st.chat_message(msg["role"]).write(msg["content"])
 
-        # 2. Obtener entrada del usuario
         user_query = st.chat_input(placeholder="¡Escribe cualquier consulta!")
-
-        # 3. Si hay entrada del usuario
         if user_query:
-            # Añadir y mostrar mensaje de usuario INMEDIATAMENTE
             st.session_state.messages.append({"role": "user", "content": user_query})
             st.chat_message("user").write(user_query)
-
             session_id = st.session_state.get("session_id", "default")
 
-            # --- Ejecutar el Agente ---
             with st.chat_message("assistant"):
                 response_container = st.empty()
                 try:
-                    # Ejecutamos sin streaming visual paso a paso
-                    # verbose=True en AgentExecutor mostrará pasos en la consola
                     response = agent_runnable.invoke(
                         {"input": user_query},
                         config={"configurable": {"session_id": session_id}}
                     )
-                    # La respuesta final del AgentExecutor suele estar en 'output'
                     final_response_text = response.get('output', "(No se obtuvo respuesta del agente)")
 
                 except Exception as e:
                     final_response_text = f"Error al ejecutar el agente: {e}"
                     st.error(final_response_text)
-                    print(f"Agent execution error: {e}") # Log del error
+                    print(f"Agent execution error: {e}")
 
-                # Mostrar la respuesta final como texto plano
                 response_container.text(final_response_text)
 
-            # Añadir respuesta completa del asistente al historial
             st.session_state.messages.append({"role": "assistant", "content": final_response_text})
             utils.print_qa(BasicChatbot, user_query, final_response_text)
-
-            # Streamlit se re-ejecutará implícitamente aquí o por interacciones.
-            # El bucle al principio dibujará el historial actualizado.
 
 if __name__ == "__main__":
     obj = BasicChatbot()
