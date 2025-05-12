@@ -110,7 +110,8 @@ New Question: {input}
         system_prompt = f"""
             Eres un filtro inteligente para un chatbot recepcionista profesional.
             Si el mensaje del usuario NO es sobre {TOPICS_STR}, devuelve SOLO este texto: '__OUT_OF_SCOPE__'.
-            Si el mensaje es relevante pero ambiguo, ajústalo para que sea claro y enfocado en los temas válidos, o el original."""
+            Si el mensaje es relevante pero ambiguo, ajústalo para que sea claro y enfocado en los temas válidos, o el original.
+        """
         prompt = f"{system_prompt}\n\nUsuario: {user_query}\nRespuesta:"
         logger.debug(f"Preprocess prompt enviado al LLM:\n{prompt}")
         try:
