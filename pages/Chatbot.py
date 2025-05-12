@@ -148,62 +148,38 @@ New Question: {{input}}
                 chat_history.append(f"Asistente: {msg['content']}")
         chat_history_str = "\n".join(chat_history[-5:])
 
-        filter_prompt = (
-            f"Eres un filtro inteligente para un chatbot recepcionista profesional. "
-            f"Evalúa si el mensaje del usuario está relacionado con: {TOPICS_STR}. "
-            f"Si NO está relacionado con estos temas, responde únicamente con la palabra '__OUT_OF_SCOPE__'. "
-            f"Si el mensaje SÍ está relacionado o tiene alguna conexión con estos temas, "
-            f"devuelve el texto original, que NO sea '__OUT_OF_SCOPE__'."
-            f"Considera que el mensaje puede estar dentro una conversación más amplia que es relevante. "
-            f"historial reciente de la conversación:\n{chat_history_str}\n\n"
+        combined_prompt = (
+            f"Eres un filtro inteligente y asistente virtual para un chatbot recepcionista profesional especializado en {TOPICS_STR}. "
+            f"Evalúa si el mensaje del usuario está relacionado con estos temas. "
+            f"Si el mensaje está relacionado o tiene alguna conexión con estos temas, responde únicamente con '__SCOPE_OK__'. "
+            f"Si NO está relacionado, responde con un mensaje amable que:\n"
+            f"1. Explique brevemente que no puedes responder a ese tema específico\n"
+            f"2. Mencione los temas sobre los que sí puedes hablar\n"
+            f"3. Ofrezca una o dos sugerencias concretas relacionadas con {TOPICS_STR} para redirigir la conversación\n"
+            f"4. Si es posible, conecta tu respuesta con el contexto de la conversación previa.\n\n"
+            f"Historial reciente de la conversación:\n{chat_history_str}\n\n"
+            f"Usuario: {user_query}\nRespuesta:"
         )
-        prompt = f"{filter_prompt}\n\nUsuario: {user_query}\nRespuesta:"
+
         try:
-            response = pre_llm.invoke(prompt)
-            logger.debug(f"RAW Response: {response}")
+            response = pre_llm.invoke(combined_prompt)
+            logger.debug(f"RAW Combined Response: {response}")
 
             if hasattr(response, 'content'):
                 result = response.content.strip()
             else:
                 result = str(response).strip()
-            logger.info(f"Filter result: '{result}'")
+            logger.info(f"Combined filter result: '{result}'")
 
-            is_out_of_scope = result == "__OUT_OF_SCOPE__" or "__OUT_OF_SCOPE__" in result
-
-            if is_out_of_scope:
-                logger.debug("Message out of context. Generating customized response.")
-                response_prompt = (
-                    f"Eres un asistente virtual amable especializado en {TOPICS_STR}. "
-                    f"Si el usuario te pregunta sobre tus capacidades, puede brindar información sobre los temas que puedes tratar. "
-                    f"El usuario ha hecho una pregunta que está fuera de tu ámbito de especialización. "
-                    f"Genera una respuesta amable que:\n"
-                    f"1. Explique brevemente que no puedes responder a ese tema específico\n"
-                    f"2. Mencione los temas sobre los que sí puedes hablar\n"
-                    f"3. Ofrezca una o dos sugerencias concretas relacionadas con {TOPICS_STR} para redirigir la conversación\n"
-                    f"4. Si es posible, conecta tu respuesta con el contexto de la conversación previa.\n\n"
-                    f"Historial reciente de la conversación:\n{chat_history_str}\n\n"
-                    f"La pregunta del usuario fue: '{user_query}'"
-                )
-
-                try:
-                    custom_response = pre_llm.invoke(response_prompt)
-                    if hasattr(custom_response, 'content'):
-                        custom_message = custom_response.content.strip()
-                    else:
-                        custom_message = str(custom_response).strip()
-
-                    logger.debug(f"Generated custom response: {custom_message}")
-                    return (custom_message, False)
-                except Exception as e:
-                    logger.error(f"Error generating custom response: {e}")
-                    # Fallback al mensaje predeterminado en caso de error
-                    return ("Lo siento, solo puedo responder preguntas sobre turismo, lugares turísticos o eventos. ¿Te gustaría saber sobre algún destino, atracción, o evento?", False)
-
-            logger.info("Message in context.")
-            return (user_query, True)
+            if result == "__SCOPE_OK__":
+                logger.info("Message in context.")
+                return (user_query, True)
+            else:
+                logger.debug("Message out of context. Returning custom response.")
+                return (result, False)
 
         except Exception as e:
-            logger.error(f"LLM Filter exception: {e}")
+            logger.error(f"LLM Combined Filter exception: {e}")
             logger.info("Allowing original message to pass through.")
             return (user_query, True)
 
