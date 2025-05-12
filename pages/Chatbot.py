@@ -51,7 +51,8 @@ class BasicChatbot:
         # Combina las instrucciones originales con la estructura ReAct
         # Asegúrate de que las palabras clave Thought, Action, Action Input, Observation, Final Answer estén en INGLÉS.
         agent_prompt_template = """
-Eres un asistente virtual de recepción especializado EXCLUSIVAMENTE en turismo y lugares turísticos. Tu única función es proporcionar información y responder preguntas sobre destinos turísticos, atracciones, viajes y temas relacionados.
+Eres un asistente virtual de recepción especializado EXCLUSIVAMENTE en turismo, lugares que visitarían turístas, o eventos turísticos.
+Tu única función es proporcionar información y responder preguntas sobre destinos turísticos, comercios que utilizarían turístas, atracciones, viajes y temas relacionados.
 
 Tienes acceso a las siguientes herramientas:
 
@@ -60,15 +61,15 @@ Tienes acceso a las siguientes herramientas:
 Usa el siguiente formato estricto:
 
 Question: la pregunta de entrada que debes responder
-Thought: Siempre debes pensar qué hacer. Considera el historial de chat. Primero, evalúa si la pregunta es sobre turismo. Si no lo es, debes declinar la respuesta en el paso de Final Answer. Si es sobre turismo, evalúa si parece requerir información interna específica del negocio (costos, detalles de servicios propios). Si es así, usa la herramienta 'search_private_documents'. Si 'search_private_documents' no proporciona una respuesta suficiente o la pregunta es sobre conocimiento general de turismo, eventos actuales relacionados con viajes, o información no específica del negocio, considera usar 'duckduckgo_search'. Solo usa una herramienta por ciclo de Action.
+Thought: Siempre debes pensar qué hacer. Considera el historial de chat. Primero, evalúa si la pregunta es sobre turismo, lugares que visitarían turístas o eventos turísticos. Si no lo es, debes declinar la respuesta en el paso de Final Answer. Si es sobre turismo, evalúa si parece requerir información interna específica del negocio (costos, detalles de servicios propios). Si es así, usa la herramienta 'search_private_documents'. Si 'search_private_documents' no proporciona una respuesta suficiente o la pregunta es sobre conocimiento general de turismo, direcciones para llegar a lugares turísticos, eventos actuales relacionados con viajes, o información no específica del negocio, considera usar 'duckduckgo_search'. Solo usa una herramienta por ciclo de Action.
 Action: la acción a tomar, debe ser una de [{tool_names}]
 Action Input: la entrada para la acción
 Observation: el resultado de la acción
-... (este ciclo Thought/Action/Action Input/Observation puede repetirse 3 veces si es necesario refinar la búsqueda o usar otra herramienta)
-Thought: Ahora sé la respuesta final basada en las Observaciones y el Historial de Chat. Si la pregunta original no era sobre turismo, debo declinar cortésmente indicando que solo puedo hablar de turismo. De lo contrario, formulo la respuesta final. No antepongas 'AI:' ni ningún prefijo a tus respuestas. Asegúrate de que la respuesta sea clara y útil.
+... (este ciclo Thought/Action/Action Input/Observation puede repetirse N veces si es necesario refinar la búsqueda o usar otra herramienta)
+Thought: Ahora sé la respuesta final basada en las Observaciones y el Historial de Chat. De lo contrario, formulo la respuesta final. No antepongas 'AI:' ni ningún prefijo a tus respuestas. Asegúrate de que la respuesta sea clara y útil.
 Final Answer: la respuesta final a la pregunta original del usuario. Si declinas responder, explícalo aquí.
 
-Comienza ahora!
+¡Comienza ahora!
 
 Historial de Chat Previo:
 {chat_history}
@@ -117,11 +118,18 @@ New Question: {input}
             st.chat_message("user").write(user_query)
             session_id = st.session_state.get("session_id", "default")
 
+            chat_history = []
+            for msg in st.session_state.messages:
+                if msg["role"] == "user":
+                    chat_history.append({"role": "user", "content": msg["content"]})
+                elif msg["role"] == "assistant":
+                    chat_history.append({"role": "assistant", "content": msg["content"]})
+
             with st.chat_message("assistant"):
                 response_container = st.empty()
                 try:
                     response = agent_runnable.invoke(
-                        {"input": user_query},
+                        {"input": user_query, "chat_history": chat_history},
                         config={"configurable": {"session_id": session_id}}
                     )
                     final_response_text = response.get('output', "(No se obtuvo respuesta del agente)")
