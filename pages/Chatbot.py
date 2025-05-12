@@ -95,7 +95,7 @@ Tienes acceso a las siguientes herramientas:
 Usa el siguiente formato estricto:
 
 Question: la pregunta de entrada que debes responder
-Thought: Siempre debes pensar qué hacer. Considera el historial de chat. Primero, evalúa si la pregunta es sobre los temas exclusivos que puede hablar. Si no lo es, debes declinar la respuesta en el paso de Final Answer. Si es relevante, evalúa si parece requerir información interna específica del negocio (costos, detalles de servicios propios). Si es así, usa la herramienta 'search_private_documents'. Si 'search_private_documents' no proporciona una respuesta suficiente o la pregunta requiere información actualizada, fechas, o lugares particulares, considera usar 'duckduckgo_search'. Solo usa una herramienta por ciclo de Action.
+Thought: Siempre debes pensar qué hacer. Considera el historial de chat para una continuación de la conversación. Primero, evalúa si la pregunta es sobre los temas exclusivos que puede hablar. Si no lo es, debes declinar la respuesta en el paso de Final Answer. Si es relevante, evalúa si parece requerir información interna específica del negocio (costos, detalles de servicios propios). Si es así, usa la herramienta 'search_private_documents'. Si 'search_private_documents' no proporciona una respuesta suficiente o la pregunta requiere información actualizada, fechas, o lugares particulares, considera usar 'duckduckgo_search'. Solo usa una herramienta por ciclo de Action.
 Action: la acción a tomar, debe ser una de [{{tool_names}}]
 Action Input: la entrada para la acción
 Observation: el resultado de la acción
@@ -140,13 +140,22 @@ New Question: {{input}}
         logger = utils.logger
         pre_llm = utils.configure_llm()
 
-        # Primera etapa: verificar si está dentro del contexto permitido
+        chat_history = []
+        for msg in st.session_state.get("messages", []):
+            if msg["role"] == "user":
+                chat_history.append(f"Usuario: {msg['content']}")
+            elif msg["role"] == "assistant":
+                chat_history.append(f"Asistente: {msg['content']}")
+        chat_history_str = "\n".join(chat_history[-5:])
+
         filter_prompt = (
             f"Eres un filtro inteligente para un chatbot recepcionista profesional. "
             f"Evalúa si el mensaje del usuario está relacionado con: {TOPICS_STR}. "
             f"Si NO está relacionado con estos temas, responde únicamente con la palabra '__OUT_OF_SCOPE__'. "
             f"Si el mensaje SÍ está relacionado o tiene alguna conexión con estos temas, "
             f"devuelve el texto original, que NO sea '__OUT_OF_SCOPE__'."
+            f"Considera que el mensaje puede estar dentro una conversación más amplia que es relevante. "
+            f"historial reciente de la conversación:\n{chat_history_str}\n\n"
         )
         prompt = f"{filter_prompt}\n\nUsuario: {user_query}\nRespuesta:"
         try:
@@ -157,21 +166,22 @@ New Question: {{input}}
                 result = response.content.strip()
             else:
                 result = str(response).strip()
-            logger.debug(f"Filter result: '{result}'")
+            logger.info(f"Filter result: '{result}'")
 
             is_out_of_scope = result == "__OUT_OF_SCOPE__" or "__OUT_OF_SCOPE__" in result
 
             if is_out_of_scope:
-                logger.info("Message out of context. Generating customized response.")
-
-                # Segunda etapa: generar una respuesta personalizada
+                logger.debug("Message out of context. Generating customized response.")
                 response_prompt = (
                     f"Eres un asistente virtual amable especializado en {TOPICS_STR}. "
+                    f"Si el usuario te pregunta sobre tus capacidades, puede brindar información sobre los temas que puedes tratar. "
                     f"El usuario ha hecho una pregunta que está fuera de tu ámbito de especialización. "
                     f"Genera una respuesta amable que:\n"
                     f"1. Explique brevemente que no puedes responder a ese tema específico\n"
                     f"2. Mencione los temas sobre los que sí puedes hablar\n"
-                    f"3. Ofrezca una o dos sugerencias concretas relacionadas con {TOPICS_STR} para redirigir la conversación\n\n"
+                    f"3. Ofrezca una o dos sugerencias concretas relacionadas con {TOPICS_STR} para redirigir la conversación\n"
+                    f"4. Si es posible, conecta tu respuesta con el contexto de la conversación previa.\n\n"
+                    f"Historial reciente de la conversación:\n{chat_history_str}\n\n"
                     f"La pregunta del usuario fue: '{user_query}'"
                 )
 
@@ -189,7 +199,7 @@ New Question: {{input}}
                     # Fallback al mensaje predeterminado en caso de error
                     return ("Lo siento, solo puedo responder preguntas sobre turismo, lugares turísticos o eventos. ¿Te gustaría saber sobre algún destino, atracción, o evento?", False)
 
-            logger.debug("Message in context.")
+            logger.info("Message in context.")
             return (user_query, True)
 
         except Exception as e:
@@ -211,18 +221,19 @@ New Question: {{input}}
 
         user_query = st.chat_input(placeholder="¡Escribe cualquier consulta!")
         if user_query:
+            # Mostrar inmediatamente el mensaje del usuario
+            st.session_state.messages.append({"role": "user", "content": user_query})
+            st.chat_message("user").write(user_query)
+
             # --- Preprocesamiento con LLM filtro ---
             preprocessed_query, continue_to_agent = self.preprocess_user_query(user_query)
             if not continue_to_agent:
-                st.session_state.messages.append({"role": "user", "content": user_query})
-                st.chat_message("user").write(user_query)
                 st.session_state.messages.append({"role": "assistant", "content": preprocessed_query})
                 st.chat_message("assistant").write(preprocessed_query)
                 utils.print_qa(BasicChatbot, user_query, preprocessed_query)
                 return
+
             # Si es relevante, continuar con el flujo normal
-            st.session_state.messages.append({"role": "user", "content": preprocessed_query})
-            st.chat_message("user").write(preprocessed_query)
             session_id = st.session_state.get("session_id", "default")
 
             chat_history = []
