@@ -49,18 +49,18 @@ def display_msg(msg, author):
     st.chat_message(author).write(msg)
 
 def configure_llm():
-	# They come by default with the model
-	# safety_settings = [
-	#     {"category": "HARM_CATEGORY_DEROGATORY", "threshold": 1},
-	#     {"category": "HARM_CATEGORY_VIOLENCE", "threshold": 2},
-	#     {"category": "HARM_CATEGORY_SEXUAL", "threshold": 2},]
-	llm = ChatGoogleGenerativeAI(
+    # They come by default with the model
+    # safety_settings = [
+    #     {"category": "HARM_CATEGORY_DEROGATORY", "threshold": 1},
+    #     {"category": "HARM_CATEGORY_VIOLENCE", "threshold": 2},
+    #     {"category": "HARM_CATEGORY_SEXUAL", "threshold": 2},]
+    llm = ChatGoogleGenerativeAI(
         model=GEMINI_MODEL_NAME,
         temperature=0,
-        streaming=True,
+        disable_streaming=False,
         api_key=st.secrets["GOOGLE_API_KEY"]
     )
-	return llm
+    return llm
 
 def print_qa(cls, question, answer):
     log_str = "\nUsecase: {}\nQuestion: {}\nAnswer: {}\n" + "------"*10
