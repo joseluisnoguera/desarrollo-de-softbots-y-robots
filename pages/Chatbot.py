@@ -1,5 +1,7 @@
 import utils
 import streamlit as st
+import os
+import json
 
 from langchain.agents import AgentExecutor, create_react_agent
 from langchain.tools.retriever import create_retriever_tool
@@ -12,8 +14,37 @@ from langchain.schema import format_document
 st.set_page_config(page_title="Chatbot", page_icon="💬")
 st.header('Chatbot Recepcionista')
 
-TOPICS_STR = "turismo, lugares turísticos, eventos turísticos, direcciones para llegar a lugares turísticos, comercios que utilizarían turistas, atracciones, viajes, temas relacionados con turismo"
-BLOCKLIST_STR = "tomar posiciones políticas, religión, temas sensibles, temas no relacionados a los estipulados anteriomente."
+# Definir la ruta del archivo de configuración
+CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config", "chatbot_config.json")
+
+# Función para cargar la configuración
+def load_config():
+    default_config = {
+        "BEHAVIOUR_STR": "profesional",
+        "TOPICS_STR": "turismo, puntos de interes para turístas, eventos turísticos, direcciones para llegar a lugares turísticos, comercios que utilizarían turistas, atracciones, viajes, eventos que pueden ser de interes para turistas como eventos deportivos, temas relacionados con turismo",
+        "BLOCKLIST_STR": "tomar posiciones políticas, religión, temas sensibles, temas no relacionados a los estipulados anteriormente."
+    }
+
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            st.warning("Error al cargar la configuración personalizada. Usando configuración predeterminada.")
+            return default_config
+    return default_config
+
+# Cargar configuración
+config = load_config()
+BEHAVIOUR_STR = config["BEHAVIOUR_STR"]
+TOPICS_STR = config["TOPICS_STR"]
+BLOCKLIST_STR = config["BLOCKLIST_STR"]
+
+# Mostrar información sobre la configuración actual
+# with st.expander("Ver configuración actual del chatbot"):
+#     st.write("**Temas permitidos:**", TOPICS_STR)
+#     st.write("**Temas bloqueados:**", BLOCKLIST_STR)
+#     st.write("Para cambiar esta configuración, ve a la página de Configuración del Chatbot.")
 
 DEFAULT_DOCUMENT_PROMPT = PromptTemplate.from_template(template="{page_content}")
 
@@ -52,20 +83,20 @@ class BasicChatbot:
         # --- Agente ReAct ---
         # Combina las instrucciones originales con la estructura ReAct
         # Asegúrate de que las palabras clave Thought, Action, Action Input, Observation, Final Answer estén en INGLÉS.
-        agent_prompt_template = """
-Eres un asistente virtual de recepción especializado EXCLUSIVAMENTE en {TOPICS_STR}.
+        agent_prompt_template = f"""
+Eres un asistente virtual de recepción especializado EXCLUSIVAMENTE en {TOPICS_STR}. Te comportarás de manera {BEHAVIOUR_STR}.
 Tu única función es proporcionar información y responder preguntas sobre los temas en los cuales estás especializado.
 No debes {BLOCKLIST_STR}. Si la pregunta no es relevante, responde con un mensaje claro y útil que explique que no puedes ayudar con eso.
 
 Tienes acceso a las siguientes herramientas:
 
-{tools}
+{{tools}}
 
 Usa el siguiente formato estricto:
 
 Question: la pregunta de entrada que debes responder
-Thought: Siempre debes pensar qué hacer. Considera el historial de chat. Primero, evalúa si la pregunta es sobre turismo, lugares que visitarían turístas o eventos turísticos. Si no lo es, debes declinar la respuesta en el paso de Final Answer. Si es sobre turismo, evalúa si parece requerir información interna específica del negocio (costos, detalles de servicios propios). Si es así, usa la herramienta 'search_private_documents'. Si 'search_private_documents' no proporciona una respuesta suficiente o la pregunta es sobre conocimiento general de turismo, direcciones para llegar a lugares turísticos, eventos actuales relacionados con viajes, o información no específica del negocio, considera usar 'duckduckgo_search'. Solo usa una herramienta por ciclo de Action.
-Action: la acción a tomar, debe ser una de [{tool_names}]
+Thought: Siempre debes pensar qué hacer. Considera el historial de chat. Primero, evalúa si la pregunta es sobre los temas exclusivos que puede hablar. Si no lo es, debes declinar la respuesta en el paso de Final Answer. Si es relevante, evalúa si parece requerir información interna específica del negocio (costos, detalles de servicios propios). Si es así, usa la herramienta 'search_private_documents'. Si 'search_private_documents' no proporciona una respuesta suficiente o la pregunta requiere información actualizada, fechas, o lugares particulares, considera usar 'duckduckgo_search'. Solo usa una herramienta por ciclo de Action.
+Action: la acción a tomar, debe ser una de [{{tool_names}}]
 Action Input: la entrada para la acción
 Observation: el resultado de la acción
 ... (este ciclo Thought/Action/Action Input/Observation puede repetirse N veces si es necesario refinar la búsqueda o usar otra herramienta)
@@ -75,10 +106,10 @@ Final Answer: la respuesta final a la pregunta original del usuario. Si declinas
 ¡Comienza ahora!
 
 Historial de Chat Previo:
-{chat_history}
+{{chat_history}}
 
-New Question: {input}
-{agent_scratchpad}
+New Question: {{input}}
+{{agent_scratchpad}}
 """
         prompt = PromptTemplate.from_template(agent_prompt_template)
 
@@ -104,32 +135,68 @@ New Question: {input}
 
         return agent_with_history
 
+
     def preprocess_user_query(self, user_query):
-        logger = utils.logger  # Usa el logger configurado en utils.py
+        logger = utils.logger
         pre_llm = utils.configure_llm()
-        system_prompt = f"""
-            Eres un filtro inteligente para un chatbot recepcionista profesional.
-            Si el mensaje del usuario NO es sobre {TOPICS_STR}, devuelve SOLO este texto: '__OUT_OF_SCOPE__'.
-            Si el mensaje es relevante pero ambiguo, ajústalo para que sea claro y enfocado en los temas válidos, o el original.
-        """
-        prompt = f"{system_prompt}\n\nUsuario: {user_query}\nRespuesta:"
-        logger.debug(f"Preprocess prompt enviado al LLM:\n{prompt}")
+
+        # Primera etapa: verificar si está dentro del contexto permitido
+        filter_prompt = (
+            f"Eres un filtro inteligente para un chatbot recepcionista profesional. "
+            f"Evalúa si el mensaje del usuario está relacionado con: {TOPICS_STR}. "
+            f"Si NO está relacionado con estos temas, responde únicamente con la palabra '__OUT_OF_SCOPE__'. "
+            f"Si el mensaje SÍ está relacionado o tiene alguna conexión con estos temas, "
+            f"devuelve el texto original, que NO sea '__OUT_OF_SCOPE__'."
+        )
+        prompt = f"{filter_prompt}\n\nUsuario: {user_query}\nRespuesta:"
         try:
             response = pre_llm.invoke(prompt)
-            logger.debug(f"Respuesta cruda del LLM filtro: {response}")
+            logger.debug(f"RAW Response: {response}")
+
             if hasattr(response, 'content'):
                 result = response.content.strip()
             else:
                 result = str(response).strip()
-            logger.debug(f"Resultado procesado del filtro: {result}")
+            logger.debug(f"Filter result: '{result}'")
+
+            is_out_of_scope = result == "__OUT_OF_SCOPE__" or "__OUT_OF_SCOPE__" in result
+
+            if is_out_of_scope:
+                logger.info("Message out of context. Generating customized response.")
+
+                # Segunda etapa: generar una respuesta personalizada
+                response_prompt = (
+                    f"Eres un asistente virtual amable especializado en {TOPICS_STR}. "
+                    f"El usuario ha hecho una pregunta que está fuera de tu ámbito de especialización. "
+                    f"Genera una respuesta amable que:\n"
+                    f"1. Explique brevemente que no puedes responder a ese tema específico\n"
+                    f"2. Mencione los temas sobre los que sí puedes hablar\n"
+                    f"3. Ofrezca una o dos sugerencias concretas relacionadas con {TOPICS_STR} para redirigir la conversación\n\n"
+                    f"La pregunta del usuario fue: '{user_query}'"
+                )
+
+                try:
+                    custom_response = pre_llm.invoke(response_prompt)
+                    if hasattr(custom_response, 'content'):
+                        custom_message = custom_response.content.strip()
+                    else:
+                        custom_message = str(custom_response).strip()
+
+                    logger.debug(f"Generated custom response: {custom_message}")
+                    return (custom_message, False)
+                except Exception as e:
+                    logger.error(f"Error generating custom response: {e}")
+                    # Fallback al mensaje predeterminado en caso de error
+                    return ("Lo siento, solo puedo responder preguntas sobre turismo, lugares turísticos o eventos. ¿Te gustaría saber sobre algún destino, atracción, o evento?", False)
+
+            logger.debug("Message in context.")
+            return (user_query, True)
+
         except Exception as e:
-            logger.error(f"Excepción en filtro LLM: {e}")
-            return ("__OUT_OF_SCOPE__", False)
-        if result == "__OUT_OF_SCOPE__":
-            logger.info("Mensaje fuera de contexto detectado por filtro.")
-            return ("Lo siento, solo puedo responder preguntas sobre turismo, lugares turísticos o eventos. ¿Te gustaría saber sobre algún destino, atracción, o evento?", False)
-        logger.info("Mensaje considerado relevante por filtro.")
-        return (result, True)
+            logger.error(f"LLM Filter exception: {e}")
+            logger.info("Allowing original message to pass through.")
+            return (user_query, True)
+
 
     @utils.enable_chat_history
     def main(self):
@@ -183,6 +250,7 @@ New Question: {input}
 
             st.session_state.messages.append({"role": "assistant", "content": final_response_text})
             utils.print_qa(BasicChatbot, preprocessed_query, final_response_text)
+
 
 if __name__ == "__main__":
     obj = BasicChatbot()

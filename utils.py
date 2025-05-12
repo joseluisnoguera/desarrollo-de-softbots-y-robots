@@ -10,6 +10,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_community.tools import DuckDuckGoSearchRun
 
 logger = get_logger('Langchain-Chatbot')
+logger.setLevel("DEBUG")
 
 # Constants
 GEMINI_MODEL_NAME = "gemini-1.5-flash"
