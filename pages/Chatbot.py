@@ -12,6 +12,8 @@ from langchain.schema import format_document
 st.set_page_config(page_title="Chatbot", page_icon="💬")
 st.header('Chatbot Recepcionista')
 
+TOPICS_STR = "turismo, lugares turísticos, eventos turísticos, direcciones para llegar a lugares turísticos, comercios que utilizarían turistas, atracciones, viajes, temas relacionados con turismo"
+BLOCKLIST_STR = "tomar posiciones políticas, religión, temas sensibles, temas no relacionados a los estipulados anteriomente."
 
 DEFAULT_DOCUMENT_PROMPT = PromptTemplate.from_template(template="{page_content}")
 
@@ -47,12 +49,13 @@ class BasicChatbot:
              st.error("No se pudieron inicializar herramientas (Retriever o Búsqueda Web). El agente no puede funcionar.")
              return None
 
-        # --- Prompt Personalizado para el Agente ReAct ---
+        # --- Agente ReAct ---
         # Combina las instrucciones originales con la estructura ReAct
         # Asegúrate de que las palabras clave Thought, Action, Action Input, Observation, Final Answer estén en INGLÉS.
         agent_prompt_template = """
-Eres un asistente virtual de recepción especializado EXCLUSIVAMENTE en turismo, lugares que visitarían turístas, o eventos turísticos.
-Tu única función es proporcionar información y responder preguntas sobre destinos turísticos, comercios que utilizarían turístas, atracciones, viajes y temas relacionados.
+Eres un asistente virtual de recepción especializado EXCLUSIVAMENTE en {TOPICS_STR}.
+Tu única función es proporcionar información y responder preguntas sobre los temas en los cuales estás especializado.
+No debes {BLOCKLIST_STR}. Si la pregunta no es relevante, responde con un mensaje claro y útil que explique que no puedes ayudar con eso.
 
 Tienes acceso a las siguientes herramientas:
 
@@ -101,6 +104,32 @@ New Question: {input}
 
         return agent_with_history
 
+    def preprocess_user_query(self, user_query):
+        logger = utils.logger  # Usa el logger configurado en utils.py
+        pre_llm = utils.configure_llm()
+        system_prompt = f"""
+            Eres un filtro inteligente para un chatbot recepcionista profesional.
+            Si el mensaje del usuario NO es sobre {TOPICS_STR}, devuelve SOLO este texto: '__OUT_OF_SCOPE__'.
+            Si el mensaje es relevante pero ambiguo, ajústalo para que sea claro y enfocado en los temas válidos, o el original."""
+        prompt = f"{system_prompt}\n\nUsuario: {user_query}\nRespuesta:"
+        logger.debug(f"Preprocess prompt enviado al LLM:\n{prompt}")
+        try:
+            response = pre_llm.invoke(prompt)
+            logger.debug(f"Respuesta cruda del LLM filtro: {response}")
+            if hasattr(response, 'content'):
+                result = response.content.strip()
+            else:
+                result = str(response).strip()
+            logger.debug(f"Resultado procesado del filtro: {result}")
+        except Exception as e:
+            logger.error(f"Excepción en filtro LLM: {e}")
+            return ("__OUT_OF_SCOPE__", False)
+        if result == "__OUT_OF_SCOPE__":
+            logger.info("Mensaje fuera de contexto detectado por filtro.")
+            return ("Lo siento, solo puedo responder preguntas sobre turismo, lugares turísticos o eventos. ¿Te gustaría saber sobre algún destino, atracción, o evento?", False)
+        logger.info("Mensaje considerado relevante por filtro.")
+        return (result, True)
+
     @utils.enable_chat_history
     def main(self):
         agent_runnable = self.setup_chain()
@@ -114,8 +143,18 @@ New Question: {input}
 
         user_query = st.chat_input(placeholder="¡Escribe cualquier consulta!")
         if user_query:
-            st.session_state.messages.append({"role": "user", "content": user_query})
-            st.chat_message("user").write(user_query)
+            # --- Preprocesamiento con LLM filtro ---
+            preprocessed_query, continue_to_agent = self.preprocess_user_query(user_query)
+            if not continue_to_agent:
+                st.session_state.messages.append({"role": "user", "content": user_query})
+                st.chat_message("user").write(user_query)
+                st.session_state.messages.append({"role": "assistant", "content": preprocessed_query})
+                st.chat_message("assistant").write(preprocessed_query)
+                utils.print_qa(BasicChatbot, user_query, preprocessed_query)
+                return
+            # Si es relevante, continuar con el flujo normal
+            st.session_state.messages.append({"role": "user", "content": preprocessed_query})
+            st.chat_message("user").write(preprocessed_query)
             session_id = st.session_state.get("session_id", "default")
 
             chat_history = []
@@ -129,7 +168,7 @@ New Question: {input}
                 response_container = st.empty()
                 try:
                     response = agent_runnable.invoke(
-                        {"input": user_query, "chat_history": chat_history},
+                        {"input": preprocessed_query, "chat_history": chat_history},
                         config={"configurable": {"session_id": session_id}}
                     )
                     final_response_text = response.get('output', "(No se obtuvo respuesta del agente)")
@@ -142,7 +181,7 @@ New Question: {input}
                 response_container.text(final_response_text)
 
             st.session_state.messages.append({"role": "assistant", "content": final_response_text})
-            utils.print_qa(BasicChatbot, user_query, final_response_text)
+            utils.print_qa(BasicChatbot, preprocessed_query, final_response_text)
 
 if __name__ == "__main__":
     obj = BasicChatbot()
