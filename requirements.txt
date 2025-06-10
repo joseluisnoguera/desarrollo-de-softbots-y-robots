@@ -5,7 +5,7 @@ langchain-google-genai==2.1.4
 langchain-text-splitters==0.3.8
 langchainhub==0.1.21
 openai==1.78.0
-requests==2.32.3
+requests==2.32.4
 SQLAlchemy==2.0.40
 streamlit==1.45.0
 validators==0.35.0
