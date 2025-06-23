@@ -1,0 +1,6 @@
+langchain
+langchain-google-genai
+a2a[langchain]
+fastapi
+uvicorn
+nest_asyncio
