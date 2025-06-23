@@ -11,7 +11,7 @@ logs:
 	docker-compose logs -f
 
 lint:
-	ruff .
+	ruff check . --fix
 
 local:
 	streamlit run Home.py --server.port=8501 --server.address=0.0.0.0
