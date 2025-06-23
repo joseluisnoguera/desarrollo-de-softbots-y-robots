@@ -45,16 +45,19 @@ Este proyecto implementa un **chatbot de recepción** especializado en turismo, 
 Para iniciar la aplicación localmente:
 
 ```sh
+make up
 make local
 ```
 o directamente:
 ```sh
+docker-compose up --build
 streamlit run Home.py --server.port=8501 --server.address=0.0.0.0
 ```
 
+Con esto levanta el container de Qdrant y luego la aplicación con Streamlit.
 Abre tu navegador en [http://localhost:8501](http://localhost:8501).
 
-## Ejecución con Docker Compose
+## Ejecución con Docker Compose (working on progress, still too slow to build)
 
 Para levantar toda la solución (chatbot + base vectorial Qdrant) ejecuta:
 
