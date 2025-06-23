@@ -1,0 +1,4 @@
+[server]
+# List of folder paths to exclude from Streamlit's file watcher.
+# We exclude __pycache__ to prevent errors with temporary bytecode files.
+folderWatchBlacklist = ["__pycache__"]
