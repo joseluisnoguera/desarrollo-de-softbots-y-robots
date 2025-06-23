@@ -27,7 +27,7 @@ Este proyecto utiliza las herramientas de Langchain, Gemini y Streamlit para bri
    pip install -r requirements.txt
    ```
 
-4. **Configura tu clave de API de Google Gemini y Google Search:**
+4. **Configura tu clave de API de Google Gemini:**
    - Crea un archivo `secrets.toml` en la carpeta `.streamlit` o usa variables de entorno
    - Debes definir:
      - `GOOGLE_API_KEY` (Gemini)
@@ -45,6 +45,26 @@ streamlit run Home.py --server.port=8501 --server.address=0.0.0.0
 ```
 
 Abre tu navegador en [http://localhost:8501](http://localhost:8501).
+
+
+## Estructura del Proyecto
+
+El proyecto está organizado de la siguiente manera:
+
+```
+agents-communication-journalists/
+├── .streamlit/
+│   └── secrets.toml        # Archivo para las claves de API
+├── pages/
+│   ├── Conversation.py     # Página de la conversación entre agentes
+│   └── Topics.py           # Página para la generación de temas
+├── src/
+│   └── agent.py            # Lógica de los agentes (placeholder)
+├── Home.py                 # Página principal de la aplicación
+├── Makefile                # Comandos para ejecutar el proyecto
+├── README.md               # Este archivo
+└── requirements.txt        # Dependencias de Python
+```
 
 
 ## Funcionalidades
