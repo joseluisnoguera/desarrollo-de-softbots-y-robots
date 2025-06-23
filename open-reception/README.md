@@ -1,4 +1,4 @@
-# Chatbot Recepcionista - Langchain + Gemini + Streamlit
+# Open Reception
 
 Este proyecto implementa un **chatbot de recepción** especializado en turismo, construido con [Streamlit](https://streamlit.io/), [Langchain](https://python.langchain.com/), y el modelo **Gemini** de Google. El asistente responde preguntas sobre destinos turísticos, atracciones, viajes y temas relacionados, utilizando tanto información interna (RAG) como búsqueda web.
 
