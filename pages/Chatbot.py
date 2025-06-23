@@ -40,12 +40,6 @@ BEHAVIOUR_STR = config["BEHAVIOUR_STR"]
 TOPICS_STR = config["TOPICS_STR"]
 BLOCKLIST_STR = config["BLOCKLIST_STR"]
 
-# Mostrar información sobre la configuración actual
-# with st.expander("Ver configuración actual del chatbot"):
-#     st.write("**Temas permitidos:**", TOPICS_STR)
-#     st.write("**Temas bloqueados:**", BLOCKLIST_STR)
-#     st.write("Para cambiar esta configuración, ve a la página de Configuración del Chatbot.")
-
 DEFAULT_DOCUMENT_PROMPT = PromptTemplate.from_template(template="{page_content}")
 
 def _combine_documents(docs, document_prompt=DEFAULT_DOCUMENT_PROMPT, document_separator="\n\n---\n\n"):
@@ -72,8 +66,6 @@ class BasicChatbot:
             tools.append(retriever_tool)
 
         if self.web_search_tool:
-            self.web_search_tool.name = "duckduckgo_search"
-            self.web_search_tool.description = "Un motor de búsqueda. Útil cuando necesitas responder preguntas sobre eventos actuales, conocimiento general o temas de turismo no cubiertos en los documentos privados. La entrada debe ser una consulta de búsqueda."
             tools.append(self.web_search_tool)
 
         if not tools:
@@ -81,12 +73,14 @@ class BasicChatbot:
              return None
 
         # --- Agente ReAct ---
-        # Combina las instrucciones originales con la estructura ReAct
-        # Asegúrate de que las palabras clave Thought, Action, Action Input, Observation, Final Answer estén en INGLÉS.
         agent_prompt_template = f"""
 Eres un asistente virtual de recepción especializado EXCLUSIVAMENTE en {TOPICS_STR}. Te comportarás de manera {BEHAVIOUR_STR}.
-Tu única función es proporcionar información y responder preguntas sobre los temas en los cuales estás especializado.
+Tu única función es proporcionar información y responder preguntas sobre los temas en los cuales estás especializado, y si es necesario, desviar la conversación a esos temas.
 No debes {BLOCKLIST_STR}. Si la pregunta no es relevante, responde con un mensaje claro y útil que explique que no puedes ayudar con eso.
+
+Además, haz preguntas sutiles y breves para conocer un poco más al usuario, como sus gustos, intereses, preferencias o necesidades relacionadas con turismo, para poder personalizar mejor la atención en el futuro. Si ya tienes información previa sobre el usuario, puedes usarla para personalizar la conversación.
+Deberás dar una respuesta útil más allá de que aún no conozcas todas las preferencias del usuario. No debes hacer preguntas demasiado personales o invasivas.
+Si notas que el usuario intenta hablar de temas no relacionados con los que tienes habilitados, redirige la conversación a los temas que sí puedes tratar.
 
 Tienes acceso a las siguientes herramientas:
 
@@ -95,12 +89,12 @@ Tienes acceso a las siguientes herramientas:
 Usa el siguiente formato estricto:
 
 Question: la pregunta de entrada que debes responder
-Thought: Siempre debes pensar qué hacer. Considera el historial de chat para una continuación de la conversación. Primero, evalúa si la pregunta es sobre los temas exclusivos que puede hablar. Si no lo es, debes declinar la respuesta en el paso de Final Answer. Si es relevante, evalúa si parece requerir información interna específica del negocio (costos, detalles de servicios propios). Si es así, usa la herramienta 'search_private_documents'. Si 'search_private_documents' no proporciona una respuesta suficiente o la pregunta requiere información actualizada, fechas, o lugares particulares, considera usar 'duckduckgo_search'. Solo usa una herramienta por ciclo de Action.
+Thought: Siempre debes pensar qué hacer. Considera el historial de chat para una continuación de la conversación y información del usuario que se ha podido conseguir. Primero, evalúa si la pregunta es sobre los temas exclusivos que puede hablar. Si no lo es, debes declinar la respuesta en el paso de Final Answer. Si es relevante, evalúa si parece requerir información interna específica del negocio (costos, detalles de servicios propios). Si es así, usa la herramienta 'search_private_documents'. Si 'search_private_documents' no proporciona una respuesta suficiente o la pregunta requiere información actualizada, fechas, o lugares particulares, considera usar 'duckduckgo_search'. Solo usa una herramienta por ciclo de Action.
 Action: la acción a tomar, debe ser una de [{{tool_names}}]
 Action Input: la entrada para la acción
 Observation: el resultado de la acción
 ... (este ciclo Thought/Action/Action Input/Observation puede repetirse N veces si es necesario refinar la búsqueda o usar otra herramienta)
-Thought: Ahora sé la respuesta final basada en las Observaciones y el Historial de Chat. De lo contrario, formulo la respuesta final. No antepongas 'AI:' ni ningún prefijo a tus respuestas. Asegúrate de que la respuesta sea clara y útil.
+Thought: Ahora sé la respuessta final basada en las Observaciones y el Historial de Chat. De lo contrario, formulo la respuesta final. No antepongas 'AI:' ni ningún prefijo a tus respuestas. Asegúrate de que la respuesta sea clara y útil.
 Final Answer: la respuesta final a la pregunta original del usuario. Si declinas responder, explícalo aquí.
 
 ¡Comienza ahora!
@@ -146,11 +140,11 @@ New Question: {{input}}
                 chat_history.append(f"Usuario: {msg['content']}")
             elif msg["role"] == "assistant":
                 chat_history.append(f"Asistente: {msg['content']}")
-        chat_history_str = "\n".join(chat_history[-5:])
+        chat_history_str = "\n".join(chat_history[-10:])
 
         combined_prompt = (
-            f"Eres un filtro inteligente y asistente virtual para un chatbot recepcionista profesional especializado en {TOPICS_STR}. "
-            f"Evalúa si el mensaje del usuario está relacionado con estos temas. "
+            f"Eres un filtro inteligente y asistente virtual para un chatbot recepcionista profesional especializado en {TOPICS_STR} que no debe {BLOCKLIST_STR}. "
+            f"Evalúa si el mensaje del usuario está relacionado con estos temas. No seas extremadamente literal, si te falta información o el mensaje es ambiguo, dejalo pasar. "
             f"Si el mensaje está relacionado o tiene alguna conexión con estos temas, responde únicamente con '__SCOPE_OK__'. "
             f"Si NO está relacionado, responde con un mensaje amable que:\n"
             f"1. Explique brevemente que no puedes responder a ese tema específico\n"
@@ -186,31 +180,82 @@ New Question: {{input}}
 
     @utils.enable_chat_history
     def main(self):
+        # Generate a unique session ID for the current user
+        if "session_id" not in st.session_state:
+            st.session_state.session_id = utils.generate_uuid()
+        session_id = st.session_state.session_id
+
         agent_runnable = self.setup_chain()
 
         if not agent_runnable:
              st.warning("El agente no pudo ser inicializado.")
              return
 
+        # --- Manejo de cambio de usuario simulado y su historial ---
+        selected_user_uuid = st.session_state.get("selected_user_uuid", None)
+        if selected_user_uuid:
+            session_id = selected_user_uuid  # Forzar que session_id sea el usuario seleccionado
+            current_messages_key = f"messages_{selected_user_uuid}"
+            # Si no existe historial para este usuario, inicializarlo con mensaje de bienvenida
+            if current_messages_key not in st.session_state or not st.session_state[current_messages_key]:
+                st.session_state[current_messages_key] = [
+                    {"role": "assistant", "content": "¡Hola! Soy tu recepcionista virtual. ¿En qué puedo ayudarte hoy?"}
+                ]
+            # Si el historial global no corresponde al usuario seleccionado, sincronizar
+            if st.session_state.get("messages", None) != st.session_state[current_messages_key]:
+                # Antes de cambiar, guarda el historial actual en la clave del usuario anterior
+                previous_user_uuid = st.session_state.get("_last_user_uuid", None)
+                if previous_user_uuid and previous_user_uuid != selected_user_uuid:
+                    st.session_state[f"messages_{previous_user_uuid}"] = st.session_state.get("messages", [])
+                # Carga el historial del usuario seleccionado
+                st.session_state["messages"] = st.session_state[current_messages_key]
+                st.session_state["_last_user_uuid"] = selected_user_uuid
+        # --- Fin manejo de cambio de usuario ---
+
         for msg in st.session_state.get("messages", []):
             st.chat_message(msg["role"]).write(msg["content"])
 
         user_query = st.chat_input(placeholder="¡Escribe cualquier consulta!")
         if user_query:
-            # Mostrar inmediatamente el mensaje del usuario
             st.session_state.messages.append({"role": "user", "content": user_query})
             st.chat_message("user").write(user_query)
 
             # --- Preprocesamiento con LLM filtro ---
             preprocessed_query, continue_to_agent = self.preprocess_user_query(user_query)
+            user_info_key = f"user_info_{session_id}"
+            # Extraer y guardar información del usuario SIEMPRE, incluso fuera de contexto
+            self.extract_and_store_user_info(user_query, session_id)
+
             if not continue_to_agent:
                 st.session_state.messages.append({"role": "assistant", "content": preprocessed_query})
                 st.chat_message("assistant").write(preprocessed_query)
                 utils.print_qa(BasicChatbot, user_query, preprocessed_query)
                 return
 
-            # Si es relevante, continuar con el flujo normal
-            session_id = st.session_state.get("session_id", "default")
+            # Usar la información del usuario para personalizar la respuesta
+            user_info_key = f"user_info_{selected_user_uuid}"
+            user_info_blocks = st.session_state.get(user_info_key, [])
+            # Construir resumen breve de preferencias
+            def resumen_preferencias(info_blocks):
+                resumen = []
+                for block in info_blocks:
+                    if isinstance(block, dict):
+                        for k, v in block.items():
+                            if k == "texto_no_json":
+                                continue
+                            if isinstance(v, list):
+                                resumen.append(f"{k}: {', '.join(map(str, v))}")
+                            else:
+                                resumen.append(f"{k}: {v}")
+                return "; ".join(resumen)
+            resumen_usuario = resumen_preferencias(user_info_blocks)
+            logger = utils.logger
+            logger.debug(f"[DEBUG] Preferencias usadas para contexto: {resumen_usuario}")
+            print(f"[DEBUG] Preferencias usadas para contexto: {resumen_usuario}")
+            if resumen_usuario:
+                contexto_usuario = f"Esta es la última información que tienes de mi: {resumen_usuario}. Ajusta tu respuesta en base a esto, personaliza también como escribes el mensaje. "
+            else:
+                contexto_usuario = ""
 
             chat_history = []
             for msg in st.session_state.messages:
@@ -222,21 +267,92 @@ New Question: {{input}}
             with st.chat_message("assistant"):
                 response_container = st.empty()
                 try:
+                    # Inyectar contexto de usuario en el input del agente SIEMPRE
+                    agent_input = contexto_usuario + preprocessed_query
                     response = agent_runnable.invoke(
-                        {"input": preprocessed_query, "chat_history": chat_history},
+                        {"input": agent_input, "chat_history": chat_history},
                         config={"configurable": {"session_id": session_id}}
                     )
                     final_response_text = response.get('output', "(No se obtuvo respuesta del agente)")
-
                 except Exception as e:
                     final_response_text = f"Error al ejecutar el agente: {e}"
                     st.error(final_response_text)
                     print(f"Agent execution error: {e}")
-
                 response_container.text(final_response_text)
-
             st.session_state.messages.append({"role": "assistant", "content": final_response_text})
             utils.print_qa(BasicChatbot, preprocessed_query, final_response_text)
+
+    def extract_and_store_user_info(self, user_message, user_uuid):
+        from utils import save_user_info_to_disk, load_user_info_from_disk
+        import re
+        # Recuperar preferencias previas
+        key = f"user_info_{user_uuid}"
+        prev = st.session_state.get(key, None)
+        if prev is None:
+            prev = load_user_info_from_disk(user_uuid)
+        if isinstance(prev, str):
+            try:
+                prev_loaded = json.loads(prev)
+                if isinstance(prev_loaded, list):
+                    prev = prev_loaded
+                elif isinstance(prev_loaded, dict):
+                    prev = [prev_loaded]
+                else:
+                    prev = []
+            except Exception:
+                prev = []
+        elif isinstance(prev, dict):
+            prev = [prev]
+        elif not isinstance(prev, list):
+            prev = []
+        preferencias_actuales = prev[-1] if prev else {}
+        extract_prompt = (
+            "Dado el siguiente mensaje de usuario y sus preferencias actuales, genera una nueva versión de las preferencias del usuario. Enfocate en información que sirva para personalizar la atención al cliente. "
+            "Detecta también preferencias comunicacionales, como tono, formalidad, etc. "
+            "No es necesario que la respuesta sea exhaustiva, pero intenta incluir información útil. "
+            "No repitas información que ya esté en las preferencias actuales. "
+            "Elimina o actualiza datos que ya no sean válidos (por ejemplo, ubicación, gustos cambiantes, etc). Sólo borralo si estás seguro que ya no es válido. En caso de duda no lo borres."
+            "Responde SOLO en formato JSON válido, sin texto adicional. Si no hay información útil, responde exactamente con '__NO_INFO__'.\n"
+            f"Preferencias actuales: {json.dumps(preferencias_actuales, ensure_ascii=False)}\n"
+            f"Mensaje del usuario: '{user_message}'\n"
+            "Ejemplo de respuesta: {\"gustos\": [\"playa\", \"música\"], \"preferencias\": [\"hoteles económicos\"]}"
+        )
+        llm = utils.configure_llm()
+        try:
+            response = llm.invoke(extract_prompt)
+            if hasattr(response, 'content'):
+                result = response.content.strip()
+            else:
+                result = str(response).strip()
+            if result != "__NO_INFO__":
+                try:
+                    parsed = json.loads(result)
+                except Exception:
+                    import re
+                    json_match = re.search(r'({.*})', result, re.DOTALL)
+                    if json_match:
+                        try:
+                            parsed = json.loads(json_match.group(1))
+                        except Exception:
+                            st.warning(f"No se pudo parsear la información extraída como JSON. Se guarda como texto plano. Respuesta LLM: {result}")
+                            parsed = {"texto_no_json": result}
+                    else:
+                        st.warning(f"No se pudo parsear la información extraída como JSON. Se guarda como texto plano. Respuesta LLM: {result}")
+                        parsed = {"texto_no_json": result}
+                # Guardar SOLO la nueva versión (pisa la anterior)
+                st.session_state[key] = [parsed]
+                save_user_info_to_disk(user_uuid, [parsed])
+                # Guardar en Qdrant con ID único
+                from utils import store_user_info_vector, configure_embedding_model
+                import uuid, time
+                unique_id = str(uuid.uuid4())
+                try:
+                    store_user_info_vector(unique_id, json.dumps(parsed, ensure_ascii=False), embedding_model=configure_embedding_model())
+                except Exception as e:
+                    print(f"[DEBUG] Error guardando en Qdrant: {e}")
+        except Exception as e:
+            print(f"Error extrayendo info de usuario: {e}")
+        return
 
 
 if __name__ == "__main__":

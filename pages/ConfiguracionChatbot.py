@@ -6,6 +6,102 @@ import streamlit as st
 st.set_page_config(page_title="Configuración del Chatbot", page_icon="⚙️")
 st.header('Configuración del Chatbot Recepcionista')
 
+# --- Usuarios simulados ---
+SIMULATED_USERS = [
+    {"name": "Usuario 1", "uuid": "b1e7c1e2-1a2b-4c3d-9e4f-1a2b3c4d5e6f"},
+    {"name": "Usuario 2", "uuid": "a2b3c4d5-6e7f-8a9b-0c1d-2e3f4a5b6c7d"},
+    {"name": "Usuario 3", "uuid": "c3d4e5f6-7a8b-9c0d-1e2f-3a4b5c6d7e8f"}
+]
+
+st.subheader("Selector de usuario")
+user_names = [user["name"] for user in SIMULATED_USERS]
+# Determinar el índice del usuario seleccionado según session_state
+selected_uuid = st.session_state.get("selected_user_uuid", SIMULATED_USERS[0]["uuid"])
+selected_user_idx = next((i for i, u in enumerate(SIMULATED_USERS) if u["uuid"] == selected_uuid), 0)
+selected_user_idx = st.selectbox(
+    "Selecciona un usuario:",
+    range(len(user_names)),
+    format_func=lambda i: user_names[i],
+    key="user_selector",
+    index=selected_user_idx
+)
+selected_user = SIMULATED_USERS[selected_user_idx]
+# Si el usuario seleccionado cambia, actualiza session_state y recarga
+if st.session_state.get("selected_user_uuid", None) != selected_user["uuid"]:
+    st.session_state["selected_user_uuid"] = selected_user["uuid"]
+    st.session_state["selected_user_name"] = selected_user["name"]
+    st.rerun()
+st.info(f"Usuario seleccionado: {selected_user['name']} (UUID: {selected_user['uuid']})")
+
+# --- Visualización de información recolectada por usuario ---
+st.subheader("Información recolectada de usuarios")
+info_user = selected_user  # Usar el usuario seleccionado en el selector principal
+user_info_key = f"user_info_{info_user['uuid']}"
+user_info = st.session_state.get(user_info_key, None)
+if user_info is None:
+    try:
+        from utils import load_user_info_from_disk
+        user_info = load_user_info_from_disk(info_user['uuid'])
+        st.session_state[user_info_key] = user_info
+    except Exception:
+        user_info = []
+with st.expander(f"Ver información recolectada para {info_user['name']}"):
+    if not user_info or user_info == "No hay información recolectada para este usuario.":
+        st.info("No hay información recolectada para este usuario.")
+    else:
+        # Si es string, intentar parsear
+        if isinstance(user_info, str):
+            try:
+                user_info = json.loads(user_info)
+            except Exception:
+                st.warning("No se pudo interpretar la información como JSON. Mostrando texto plano.")
+                st.code(user_info)
+                user_info = None
+        if user_info:
+            if isinstance(user_info, list):
+                for idx, item in enumerate(user_info):
+                    st.markdown(f"**Bloque {idx+1}:**")
+                    # Edición y borrado
+                    col1, col2 = st.columns([3,1])
+                    with col1:
+                        if isinstance(item, dict):
+                            st.json(item, expanded=False)
+                        else:
+                            st.code(str(item))
+                    with col2:
+                        if st.button("✏️ Editar", key=f"edit_{info_user['uuid'].replace('-', '')}_{idx}"):
+                            st.session_state[f"edit_mode_{info_user['uuid'].replace('-', '')}_{idx}"] = True
+                        if st.button("🗑️ Borrar", key=f"delete_{info_user['uuid'].replace('-', '')}_{idx}"):
+                            user_info.pop(idx)
+                            st.session_state[user_info_key] = user_info
+                            # Guardar en disco
+                            from utils import save_user_info_to_disk
+                            save_user_info_to_disk(info_user['uuid'], user_info)
+                            st.rerun()
+                    # Edición en línea
+                    if st.session_state.get(f"edit_mode_{info_user['uuid'].replace('-', '')}_{idx}", False):
+                        edited = st.text_area("Editar bloque (JSON)", value=json.dumps(item, ensure_ascii=False, indent=2), key=f"edit_area_{info_user['uuid'].replace('-', '')}_{idx}")
+                        if st.button("💾 Guardar cambios", key=f"save_{info_user['uuid'].replace('-', '')}_{idx}"):
+                            try:
+                                new_item = json.loads(edited)
+                                user_info[idx] = new_item
+                                st.session_state[user_info_key] = user_info
+                                from utils import save_user_info_to_disk
+                                save_user_info_to_disk(info_user['uuid'], user_info)
+                                st.session_state[f"edit_mode_{info_user['uuid'].replace('-', '')}_{idx}"] = False
+                                st.success("Bloque editado correctamente.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error al guardar: {e}")
+                        if st.button("❌ Cancelar", key=f"cancel_{info_user['uuid'].replace('-', '')}_{idx}"):
+                            st.session_state[f"edit_mode_{info_user['uuid'].replace('-', '')}_{idx}"] = False
+                            st.rerun()
+            elif isinstance(user_info, dict):
+                for k, v in user_info.items():
+                    st.write(f"- **{k}:** {v}")
+            else:
+                st.code(str(user_info))
+
 # Definir la ruta del archivo de configuración
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config", "chatbot_config.json")
 os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
@@ -107,17 +203,8 @@ if submit_button:
     else:
         st.error("❌ No se pudo guardar la configuración.")
 
-# Sección de vista previa y prueba
-st.subheader("Vista previa de la configuración actual")
-with st.expander("Ver configuración actual"):
-    st.write("**Temas permitidos:**")
-    st.code(current_config["TOPICS_STR"])
-    st.write("**Temas bloqueados:**")
-    st.code(current_config["BLOCKLIST_STR"])
-    st.write("**Comportamiento del agente:**")
-    st.code(current_config["BEHAVIOUR_STR"])
-
 # Sección de ayuda
+st.subheader("Ayuda")
 with st.expander("Ayuda"):
     st.write("""
     ### Cómo funciona

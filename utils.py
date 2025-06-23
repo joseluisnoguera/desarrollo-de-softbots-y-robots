@@ -6,8 +6,12 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import DirectoryLoader, TextLoader
-from langchain_community.vectorstores import FAISS
-from langchain_community.tools import DuckDuckGoSearchRun
+from langchain_qdrant import Qdrant  # <--- Cambiado aquí
+from qdrant_client import QdrantClient
+from langchain_core.tools import BaseTool
+import requests
+import json
+import time
 
 logger = get_logger('Langchain-Chatbot')
 logger.setLevel("DEBUG")
@@ -15,6 +19,13 @@ logger.setLevel("DEBUG")
 # Constants
 GEMINI_MODEL_NAME = "gemini-1.5-flash"
 PRIVATE_DATA_DIR = "data" # Private data directory
+QDRANT_HOST = os.environ.get("QDRANT_HOST", "localhost")
+QDRANT_PORT = int(os.environ.get("QDRANT_PORT", 6333))
+QDRANT_COLLECTION = "rag_documents"
+QDRANT_USER_COLLECTION = "user_info"
+
+USER_DATA_DIR = os.path.join(os.path.dirname(__file__), "user_data")
+os.makedirs(USER_DATA_DIR, exist_ok=True)
 
 #decorator
 def enable_chat_history(func):
@@ -69,7 +80,7 @@ def print_qa(cls, question, answer):
 
 @st.cache_resource
 def configure_embedding_model():
-    embedding_model = FastEmbedEmbeddings(model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2") # Ejemplo multilingüe
+    embedding_model = FastEmbedEmbeddings(model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", pooling="cls") # Ejemplo multilingüe
     return embedding_model
 
 # --- RAG Tool ---
@@ -88,16 +99,49 @@ def setup_vector_store(data_dir=PRIVATE_DATA_DIR):
     splits = text_splitter.split_documents(docs)
 
     embedding_model = configure_embedding_model()
-
-    # FAISS is a vector store library that allows for efficient similarity search locally
     try:
-        vectorstore = FAISS.from_documents(documents=splits, embedding=embedding_model)
-        logger.info(f"Vector store creado con {len(splits)} chunks.")
+        vectorstore = Qdrant.from_documents(
+            documents=splits,
+            embedding=embedding_model,  # <--- corregido aquí para langchain-qdrant
+            url=f"http://{QDRANT_HOST}:{QDRANT_PORT}",
+            collection_name=QDRANT_COLLECTION
+        )
+        logger.info(f"Vector store Qdrant creado con {len(splits)} chunks.")
         return vectorstore
     except Exception as e:
-        logger.error(f"Error al crear el vector store FAISS: {e}")
+        logger.error(f"Error al crear el vector store Qdrant: {e}")
         st.error(f"Error al procesar los datos privados: {e}")
         return None
+
+def store_user_info_vector(user_uuid, user_info, embedding_model=None):
+    if embedding_model is None:
+        embedding_model = configure_embedding_model()
+    qdrant_client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
+
+    # --- Crear colección si no existe ---
+    from qdrant_client.http import models as qdrant_models
+    collections = qdrant_client.get_collections().collections
+    if QDRANT_USER_COLLECTION not in [c.name for c in collections]:
+        qdrant_client.create_collection(
+            collection_name=QDRANT_USER_COLLECTION,
+            vectors_config=qdrant_models.VectorParams(
+                size=embedding_model.embedding_size if hasattr(embedding_model, 'embedding_size') else 384,
+                distance=qdrant_models.Distance.COSINE
+            )
+        )
+    # --- Fin crear colección ---
+    vectorstore = Qdrant(
+        client=qdrant_client,
+        collection_name=QDRANT_USER_COLLECTION,
+        embeddings=embedding_model
+    )
+    unique_id = str(uuid.uuid4())
+    vectorstore.add_texts(
+        [user_info],
+        ids=[unique_id],
+        metadatas=[{"user_uuid": user_uuid, "timestamp": int(time.time()*1000)}]
+    )
+    logger.info(f"User info vector almacenado para {user_uuid} con id {unique_id}")
 
 def get_retriever():
     vectorstore = setup_vector_store()
@@ -108,10 +152,58 @@ def get_retriever():
 
 # --- Web Search Tool ---
 def get_web_search_tool():
-    """Crea y retorna la herramienta de búsqueda web DuckDuckGo."""
-    search = DuckDuckGoSearchRun()
-    return search
+    """Crea y retorna una herramienta de búsqueda web usando la API de Serper.dev compatible con LangChain."""
+    import streamlit as st
+    import requests
+    from langchain_core.tools import BaseTool
+
+    class SerperSearchTool(BaseTool):
+        name: str = "serper_search"
+        description: str = (
+            "Motor de búsqueda Serper.dev. Útil para responder preguntas sobre eventos actuales, conocimiento general o temas de turismo no cubiertos en los documentos privados. La entrada debe ser una consulta de búsqueda."
+        )
+        api_key: str
+
+        def _run(self, query: str) -> str:
+            url = "https://google.serper.dev/search"
+            headers = {"X-API-KEY": self.api_key, "Content-Type": "application/json"}
+            data = {"q": query}
+            try:
+                resp = requests.post(url, headers=headers, json=data, timeout=10)
+                resp.raise_for_status()
+                results = resp.json().get("organic", [])
+                if not results:
+                    return "No se encontraron resultados."
+                return "\n\n".join(f"{item['title']}: {item['link']}\n{item.get('snippet','')}" for item in results[:3])
+            except Exception as e:
+                return f"Error en búsqueda Serper: {e}"
+
+        def _arun(self, query: str):
+            raise NotImplementedError("Async no implementado para SerperSearchTool")
+
+    api_key = st.secrets["SERPER_API_KEY"]
+    return SerperSearchTool(api_key=api_key)
 
 def sync_st_session():
     for k, v in st.session_state.items():
         st.session_state[k] = v
+
+def save_user_info_to_disk(user_uuid, info_list):
+    """Guarda la lista de info de usuario en un archivo JSON por usuario."""
+    path = os.path.join(USER_DATA_DIR, f"{user_uuid}.json")
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(info_list, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"Error guardando info usuario en disco: {e}")
+
+def load_user_info_from_disk(user_uuid):
+    """Carga la lista de info de usuario desde disco, o [] si no existe."""
+    path = os.path.join(USER_DATA_DIR, f"{user_uuid}.json")
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Error cargando info usuario de disco: {e}")
+    return []
