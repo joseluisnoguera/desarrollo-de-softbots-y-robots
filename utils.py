@@ -6,7 +6,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import DirectoryLoader, TextLoader
-from langchain_qdrant import Qdrant  # <--- Cambiado aquí
+from langchain_qdrant import QdrantVectorStore  # <--- Cambiado aquí
 from qdrant_client import QdrantClient
 from langchain_core.tools import BaseTool
 import requests
@@ -80,7 +80,7 @@ def print_qa(cls, question, answer):
 
 @st.cache_resource
 def configure_embedding_model():
-    embedding_model = FastEmbedEmbeddings(model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", pooling="cls") # Ejemplo multilingüe
+    embedding_model = FastEmbedEmbeddings(model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2") # Ejemplo multilingüe
     return embedding_model
 
 # --- RAG Tool ---
@@ -100,7 +100,7 @@ def setup_vector_store(data_dir=PRIVATE_DATA_DIR):
 
     embedding_model = configure_embedding_model()
     try:
-        vectorstore = Qdrant.from_documents(
+        vectorstore = QdrantVectorStore.from_documents(
             documents=splits,
             embedding=embedding_model,  # <--- corregido aquí para langchain-qdrant
             url=f"http://{QDRANT_HOST}:{QDRANT_PORT}",
@@ -130,10 +130,10 @@ def store_user_info_vector(user_uuid, user_info, embedding_model=None):
             )
         )
     # --- Fin crear colección ---
-    vectorstore = Qdrant(
+    vectorstore = QdrantVectorStore(
         client=qdrant_client,
         collection_name=QDRANT_USER_COLLECTION,
-        embeddings=embedding_model
+        embedding=embedding_model
     )
     unique_id = str(uuid.uuid4())
     vectorstore.add_texts(

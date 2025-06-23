@@ -89,12 +89,12 @@ Tienes acceso a las siguientes herramientas:
 Usa el siguiente formato estricto:
 
 Question: la pregunta de entrada que debes responder
-Thought: Siempre debes pensar qué hacer. Considera el historial de chat para una continuación de la conversación y información del usuario que se ha podido conseguir. Primero, evalúa si la pregunta es sobre los temas exclusivos que puede hablar. Si no lo es, debes declinar la respuesta en el paso de Final Answer. Si es relevante, evalúa si parece requerir información interna específica del negocio (costos, detalles de servicios propios). Si es así, usa la herramienta 'search_private_documents'. Si 'search_private_documents' no proporciona una respuesta suficiente o la pregunta requiere información actualizada, fechas, o lugares particulares, considera usar 'duckduckgo_search'. Solo usa una herramienta por ciclo de Action.
+Thought: Siempre debes pensar qué hacer. Considera el historial de chat para una continuación de la conversación y la información del usuario que se ha podido conseguir. Primero, evalúa si la pregunta es sobre los temas exclusivos que puedes tratar. Si no lo es, o si puedes responder directamente sin necesidad de herramientas, debes responder directamente en 'Final Answer'. Si la pregunta es relevante y necesitas información adicional, evalúa si parece requerir información interna específica del negocio (costos, detalles de servicios propios) y usa la herramienta 'search_private_documents'. Si 'search_private_documents' no proporciona una respuesta suficiente o la pregunta requiere información actualizada, fechas o lugares particulares, considera usar 'serper_search'. Solo usa una herramienta por ciclo de Action.
 Action: la acción a tomar, debe ser una de [{{tool_names}}]
 Action Input: la entrada para la acción
 Observation: el resultado de la acción
-... (este ciclo Thought/Action/Action Input/Observation puede repetirse N veces si es necesario refinar la búsqueda o usar otra herramienta)
-Thought: Ahora sé la respuessta final basada en las Observaciones y el Historial de Chat. De lo contrario, formulo la respuesta final. No antepongas 'AI:' ni ningún prefijo a tus respuestas. Asegúrate de que la respuesta sea clara y útil.
+... (este ciclo Thought/Action/Action Input/Observation puede repetirse 3 veces si es necesario refinar la búsqueda o usar otra herramienta)
+Thought: Ahora sé la respuesta final basada en las Observaciones y el Historial de Chat. Voy a formular la respuesta final. No antepongas 'AI:' ni ningún prefijo a tus respuestas. Asegúrate de que la respuesta sea clara y útil.
 Final Answer: la respuesta final a la pregunta original del usuario. Si declinas responder, explícalo aquí.
 
 ¡Comienza ahora!
