@@ -1,6 +1,6 @@
 # Open Reception
 
-Este proyecto implementa un **chatbot de recepción** especializado en turismo, construido con [Streamlit](https://streamlit.io/), [Langchain](https://python.langchain.com/), y el modelo **Gemini** de Google. El asistente responde preguntas sobre destinos turísticos, atracciones, viajes y temas relacionados, utilizando tanto información interna (RAG) como búsqueda web.
+Este proyecto implementa un **chatbot de recepción** especializado en turismo, construido con [Streamlit](https://streamlit.io/), [Langchain](https://python.langchain.com/), y el **modelo** **Gemini** de Google. El asistente responde preguntas sobre destinos turísticos, atracciones, viajes y temas relacionados, utilizando tanto información interna (RAG) como búsqueda web.
 
 ## Características
 
@@ -17,7 +17,7 @@ Este proyecto implementa un **chatbot de recepción** especializado en turismo, 
 1. **Clona el repositorio:**
    ```sh
    git clone https://github.com/tu_usuario/desarrollo-de-softbots-y-robots.git
-   cd desarrollo-de-softbots-y-robots
+   cd desarrollo-de-softbots-y-robots/open-reception
    ```
 
 2. **Crea un entorno virtual y activa:**
