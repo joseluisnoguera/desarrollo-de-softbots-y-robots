@@ -14,6 +14,8 @@ type BuyItemsArguments struct {
 	Items []types.UpdateItemQuantityRequest `json:"items" jsonschema:"required,description=The items to be bought"`
 }
 
+type ListItemsArguments struct{}
+
 type RestockItemsArguments struct {
 	Items []types.UpdateItemQuantityRequest `json:"items" jsonschema:"required,description=The items to be restocked"`
 }
@@ -23,7 +25,7 @@ func main() {
 
 	server := mcp.NewServer(stdio.NewStdioServerTransport())
 
-	err := server.RegisterTool("list_items", "List all items in the supermarket", func(arguments any) (*mcp.ToolResponse, error) {
+	err := server.RegisterTool("list_items", "List all items in the supermarket", func(arguments ListItemsArguments) (*mcp.ToolResponse, error) {
 		items, err := client.ListItems()
 		if err != nil {
 			return nil, err
