@@ -4,10 +4,8 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import tool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 import os
-import asyncio
 import logging
 import httpx
-import json
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)

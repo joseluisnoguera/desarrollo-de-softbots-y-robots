@@ -10,10 +10,13 @@ import (
 	"supermarket-api/pkg/types"
 )
 
-const apiURL = "http://localhost:3005"
+const (
+	apiURL    = "http://localhost:3005"
+	itemsPath = "/items"
+)
 
 func ListItems() (string, error) {
-	resp, err := http.Get(apiURL + "/items")
+	resp, err := http.Get(apiURL + itemsPath)
 	if err != nil {
 		return "", err
 	}
@@ -33,7 +36,7 @@ func BuyItems(items []types.UpdateItemQuantityRequest) (string, error) {
 		return "", err
 	}
 
-	req, err := http.NewRequest("POST", apiURL+"/items", bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequest("POST", apiURL+itemsPath, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return "", err
 	}
@@ -60,7 +63,7 @@ func RestockItems(items []types.UpdateItemQuantityRequest) (string, error) {
 		return "", err
 	}
 
-	req, err := http.NewRequest("PUT", apiURL+"/items", bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequest("PUT", apiURL+itemsPath, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return "", err
 	}
