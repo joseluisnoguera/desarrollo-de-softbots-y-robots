@@ -1,103 +1,109 @@
+"""
+Gemini agent for the supermarket application.
+"""
 import streamlit as st
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.tools import tool
+from langchain_core.messages import SystemMessage
 from langchain_mcp_adapters.client import MultiServerMCPClient
-import os
 import logging
-import httpx
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
+from .models import AgentConfig
+from .config import get_mcp_server_path, AGENT_SYSTEM_PROMPT
+from .tools import wholesaler_restock
+from .exceptions import AgentInitializationError
+
 logger = logging.getLogger(__name__)
 
-@tool
-async def wholesaler_restock(products: list) -> list:
-    """Call the wholesaler agent to request restocking of products.
-
-    Args:
-        products: List of dictionaries with 'product_id' and 'quantity' keys
-
-    Returns:
-        List of dictionaries with 'product_id' and 'quantity' that can be restocked
-    """
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "http://localhost:8080/restock",
-                json={"products": products},
-                timeout=30.0
-            )
-            response.raise_for_status()
-            return response.json()
-    except Exception as e:
-        logging.error(f"Error calling wholesaler agent: {e}")
-        return []
-
 class GeminiAgent:
-    def __init__(self, agent_name, personality, stance, model_name="gemini-1.5-flash", temperature=0.7):
-        self.personality = personality
-        self.stance = stance
-        self.agent_name = agent_name
-        self.model_name = model_name
-        self.temperature = temperature
+    """Gemini-based agent for supermarket operations."""
+
+    def __init__(self, config: AgentConfig):
+        self.config = config
         self.tools = []
         self.llm = None
-
-        mcp_server_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'supermarket-api'))
-
-        # MCP client configuration for the supermarket API (Go server)
-        self.mcp_server_path = mcp_server_path
+        self.mcp_server_path = get_mcp_server_path()
         self.mcp_client = None
+
+    @classmethod
+    def create_default(cls, name: str, personality: str, stance: str = ""):
+        """Create agent with default configuration."""
+        config = AgentConfig(
+            name=name,
+            personality=personality,
+            stance=stance
+        )
+        return cls(config)
 
     async def initialize(self):
         """Initializes the agent's tools and LLM asynchronously."""
-        if not self.tools:
-            try:
-                # Create MCP client for the supermarket API
-                self.mcp_client = MultiServerMCPClient({
-                    "supermarket": {
-                        "command": "go",
-                        "args": ["run", "cmd/mcp-server/mcp_server.go"],
-                        "cwd": self.mcp_server_path
-                    }
-                })
+        if self.tools:
+            return  # Already initialized
 
-                # Get tools from MCP client (supermarket API)
-                mcp_tools = await self.mcp_client.get_tools()
-                # Add our custom wholesaler tool
-                self.tools = mcp_tools + [wholesaler_restock]
-                self.llm = self._configure_llm()
-            except Exception as e:
-                logger.error(f"Error initializing MCP client: {e}")
-                # Fallback to just the wholesaler tool if MCP fails
-                self.tools = [wholesaler_restock]
-                self.llm = self._configure_llm()
+        try:
+            await self._initialize_mcp_tools()
+            self.llm = self._configure_llm()
+            logger.info("Agent initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize agent: {e}")
+            raise AgentInitializationError(
+                f"Agent initialization failed: {e}"
+            ) from e
+
+    async def _initialize_mcp_tools(self):
+        """Initialize MCP tools and fallback to wholesaler tool if needed."""
+        try:
+            logger.info(f"Attempting to connect to MCP server at: {self.mcp_server_path}")
+
+            # Create MCP client for the supermarket API
+            self.mcp_client = MultiServerMCPClient({
+                "supermarket": {
+                    "command": "go",
+                    "args": ["run", "./cmd/mcp-server/mcp_server.go"],
+                    "cwd": self.mcp_server_path,
+                    "transport": "stdio"
+                }
+            })
+
+            logger.info("MCP client created, attempting to get tools...")
+            # Get tools from MCP client (supermarket API)
+            mcp_tools = await self.mcp_client.get_tools()
+            logger.info(f"Retrieved {len(mcp_tools)} MCP tools")
+
+            # Add our custom wholesaler tool
+            self.tools = mcp_tools + [wholesaler_restock]
+            logger.info("MCP tools initialized successfully")
+        except Exception as e:
+            logger.warning(f"MCP client initialization failed: {type(e).__name__}: {e}")
+            logger.info("Falling back to wholesaler tool only")
+            # Fallback to just the wholesaler tool if MCP fails
+            self.tools = [wholesaler_restock]
 
     def _configure_llm(self):
-        llm = ChatGoogleGenerativeAI(
-            model=self.model_name,
-            temperature=self.temperature,
-            api_key=st.secrets["GOOGLE_API_KEY"]
-        )
-        return llm.bind_tools(self.tools)
+        """Configure the language model with tools."""
+        try:
+            llm = ChatGoogleGenerativeAI(
+                model=self.config.model_name,
+                temperature=self.config.temperature,
+                api_key=st.secrets["GOOGLE_API_KEY"]
+            )
+            return llm.bind_tools(self.tools)
+        except Exception as e:
+            logger.error(f"Failed to configure LLM: {e}")
+            raise AgentInitializationError(
+                f"LLM configuration failed: {e}"
+            ) from e
 
     async def generate_response(self, history):
-        prompt = f"""
-        Eres un agente de IA que representa a un supermercado.
-        Tu nombre es: {self.agent_name}
-        Tu personalidad es: {self.personality}
+        """Generate response from the agent."""
+        if not self.llm:
+            raise AgentInitializationError(
+                "Agent not initialized. Call initialize() first."
+            )
 
-        Tu función es ayudar a los clientes con sus necesidades en el supermercado.
-        Se te ha proporcionado un conjunto de herramientas para interactuar con los sistemas del supermercado.
-        Debes utilizar estas herramientas siempre que sea apropiado para responder a las consultas de los usuarios de forma eficaz.
-        Si necesitas reponer mercadería, utiliza al agente Wholesaler para confirmar la reposición de productos, y con esto haz la reposición en el inventario del supermercado.
-
-        **Instrucciones importantes para el uso de herramientas:**
-        1.  **Comunicación proactiva:** Antes de ejecutar una herramienta, SIEMPRE debes informar al usuario de la acción que estás a punto de realizar con un mensaje claro y conciso. Por ejemplo: "Voy a consultar el inventario" o "Permíteme añadir eso a tu cesta". Esto asegura que el usuario esté siempre informado y evita enviar mensajes vacíos.
-        2.  **Uso encadenado:** A veces necesitarás hacer varias llamadas a diferentes herramientas para completar una tarea. Por ejemplo, para comprar un producto, puede que primero necesites buscar su ID con la herramienta de listar productos y luego usar la herramienta de compra.
-        3.  **Búsqueda de IDs:** Si necesitas el ID de algún producto para otra herramienta (como comprar o reponer), utiliza primero la herramienta de listado de productos para encontrarlo. No asumas que conoces el ID.
-        """
+        prompt = AGENT_SYSTEM_PROMPT.format(
+            agent_name=self.config.name,
+            personality=self.config.personality
+        )
 
         messages = [SystemMessage(content=prompt)]
         messages.extend(history)
