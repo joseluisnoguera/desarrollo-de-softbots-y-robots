@@ -1,98 +1,303 @@
 # Journalists Discussions
 
-Este proyecto utiliza las herramientas de Langchain, Gemini y Streamlit para brindar una herramienta de discusión entre agentes de AI, actualmente sólo desarrollado para utilizar modelos de Gemini.
+Una aplicación avanzada de discusión entre agentes de IA que actúan como periodistas, construida con tecnologías modernas y siguiendo las mejores prácticas de desarrollo de Python.
 
-## Características
+## 🚀 Características
 
-- **Interfaz web interactiva** con Streamlit.
-- **Historial de chat** persistente por sesión.
-- **Modelo Gemini** de Google para generación de respuestas.
+- **Interfaz web interactiva** con Streamlit
+- **Generación automática de temas** y posturas opuestas
+- **Conversaciones dinámicas** entre agentes IA
+- **Personalidades configurables** para cada agente
+- **Historial de chat persistente** por sesión
+- **Arquitectura modular** y extensible
+- **Manejo de errores robusto** y logging
+- **Testing automatizado** y calidad de código
 
-## Instalación
+## 🛠️ Tecnologías Utilizadas
 
-1. **Clona el repositorio:**
-   ```sh
-   git clone https://github.com/tu_usuario/desarrollo-de-softbots-y-robots.git
-   cd desarrollo-de-softbots-y-robots/agents-communication-journalists
-   ```
+- **Python 3.10+**: Lenguaje de programación principal
+- **Streamlit**: Framework para la interfaz web
+- **LangChain**: Framework para integración con LLMs
+- **Google Gemini**: Modelo de IA para generación de respuestas
+- **Pydantic**: Validación y serialización de datos
+- **Ruff**: Linting y formateo de código
+- **Pytest**: Framework de testing
+- **MyPy**: Verificación de tipos estáticos
 
-2. **Crea un entorno virtual y activa:**
-   ```sh
-   python3 -m venv venv
-   source venv/bin/activate
-   ```
-
-3. **Instala las dependencias:**
-   ```sh
-   pip install -r requirements.txt
-   ```
-
-4. **Configura tu clave de API de Google Gemini:**
-   - Crea un archivo `secrets.toml` en la carpeta `.streamlit` o usa variables de entorno
-   - Debes definir:
-     - `GOOGLE_API_KEY` (Gemini)
-
-## Ejecución
-
-Para iniciar la aplicación localmente:
-
-```sh
-make local
-```
-o directamente:
-```sh
-streamlit run Home.py --server.port=8501 --server.address=0.0.0.0
-```
-
-Abre tu navegador en [http://localhost:8501](http://localhost:8501).
-
-
-## Estructura del Proyecto
-
-El proyecto está organizado de la siguiente manera:
+## 🏗️ Arquitectura del Proyecto
 
 ```
 agents-communication-journalists/
-├── .streamlit/
-│   └── secrets.toml        # Archivo para las claves de API
-├── pages/
-│   ├── Conversation.py     # Página de la conversación entre agentes
-│   └── Topics.py           # Página para la generación de temas
-├── src/
-│   └── agent.py            # Lógica de los agentes (placeholder)
-├── Home.py                 # Página principal de la aplicación
-├── Makefile                # Comandos para ejecutar el proyecto
-├── README.md               # Este archivo
-└── requirements.txt        # Dependencias de Python
+├── src/                          # Código fuente principal
+│   ├── __init__.py              # Inicialización del paquete
+│   ├── config.py                # Configuración y constantes
+│   ├── models.py                # Modelos de datos Pydantic
+│   ├── exceptions.py            # Excepciones personalizadas
+│   ├── utils.py                 # Funciones utilitarias
+│   ├── gemini_agent.py          # Agentes Gemini
+│   ├── conversation_service.py  # Servicio de conversación
+│   └── ui_components.py         # Componentes de interfaz
+├── pages/                       # Páginas de Streamlit
+│   ├── Conversation.py          # Página de conversación
+│   └── Topics.py                # Página de generación de temas
+├── tests/                       # Tests automatizados
+│   ├── __init__.py
+│   ├── conftest.py              # Configuración de tests
+│   └── test_utils.py            # Tests de utilidades
+├── .streamlit/                  # Configuración de Streamlit
+│   └── secrets.toml             # Claves de API (no versionado)
+├── Home.py                      # Página principal
+├── requirements.txt             # Dependencias Python
+├── pyproject.toml              # Configuración de herramientas
+├── Makefile                    # Comandos de desarrollo
+├── .gitignore                  # Archivos ignorados por Git
+└── README.md                   # Este archivo
 ```
 
+## 📦 Instalación y Configuración
 
-## Funcionalidades
+### Prerrequisitos
 
-### Ventana de temas
+- Python 3.10 o superior
+- pip (gestor de paquetes de Python)
+- Git (para clonar el repositorio)
 
-Aquí se visualiza sólo un input de texto libre, en el cuál el usuario puede cargar un tema a que se pueda discutir entre los dos agentes "Periodistas".
-Esto se le enviará a un agente que tiene por objetivo:
- - Dar una versión méjorada del tema a tratar, preparado para ser usado como input para modelos
- - Brindar dos posibles posturas opuestas que se pueden tomar sobre este tema
-Visualmente, la respuesta se dara:
-  - Tema a tratar mejorado en un campo de texto no editable
-  - Posibles posturas opuestas mediante dos campos de texto no editables que ocupan la mitad de la visual cada uno, uno al lado del otro
+### Instalación Rápida
 
-### Ventana de conversación
+1. **Clona el repositorio:**
+   ```bash
+   git clone <repository-url>
+   cd agents-communication-journalists
+   ```
 
-Se visualiza un chat, en el cual participarán los dos agentes (agentes independientes entre si)
-A la izquierda se tiene un menú con tres bloques de configuración, uno general sobre la conversación en el cuál:
- - Se puede definir el tema de discusión
- - Se puede configurar cuantos mensajes permitir a los agentes durante la conversación (mínimo 1, máximo 10)
- - Botón de continuar con conversación, que toma el valor de cantida de mensaje que pueden mandarse al momento de accionar
+2. **Configura el entorno de desarrollo:**
+   ```bash
+   make dev
+   ```
 
-Luego, los otros dos bloques representan las configución particular por cada agente, sin que estas pueda modificar su role como "Periodistas", en el cual en cada uno se puede:
- - Configurar "Personalidad" del agente mediante un campo de texto libre
- - Configuración de "postura" del agente sobre el tema a conversar
+3. **Configura tu clave de API de Google Gemini:**
+   ```bash
+   mkdir -p .streamlit
+   echo 'GOOGLE_API_KEY = "tu_clave_api_aqui"' > .streamlit/secrets.toml
+   ```
 
-El accionar de iniciar la conversación no puede darse si no hay un tema de conversación inicial, luego de iniciada la conversación este campo no es modificable, o si a alguno de los agentes "Periodistas" les falta su postura, siendo estos campos de postura modificables sobre cada iteración de la conversación, pero no pueden estar vacíos para continuar tocar el botón de continuar conversación.
+4. **Ejecuta la aplicación:**
+   ```bash
+   make local
+   ```
 
-### TODO
+### Instalación Manual
 
-[] Agregar más agentes y poder configurar cada "Periodista" con distintos modelos
+1. **Crear entorno virtual:**
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate  # En Linux/Mac
+   # o
+   venv\Scripts\activate     # En Windows
+   ```
+
+2. **Instalar dependencias:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Configurar clave de API:**
+   - Crea el archivo `.streamlit/secrets.toml`
+   - Añade tu clave de API de Google Gemini:
+     ```toml
+     GOOGLE_API_KEY = "tu_clave_api_aqui"
+     ```
+
+4. **Ejecutar la aplicación:**
+   ```bash
+   streamlit run Home.py --server.port=8502 --server.address=0.0.0.0
+   ```
+
+## 🎮 Uso de la Aplicación
+
+### 1. Página de Inicio
+- Información general de la aplicación
+- Navegación a las diferentes funcionalidades
+
+### 2. Generación de Temas (`/Topics`)
+- **Input**: Ingresa un tema libre en el campo de texto
+- **Proceso**: Un agente IA procesa el tema y genera:
+  - Versión mejorada del tema para debate
+  - Dos posturas opuestas bien definidas
+- **Output**: Visualización de resultados en campos no editables
+- **Acción**: Botón para guardar el tema y posturas para la conversación
+
+### 3. Conversación (`/Conversation`)
+
+#### Configuración (Barra Lateral)
+- **Tema de discusión**: Campo de texto para el tema
+- **Turnos por interacción**: Slider (1-10 mensajes)
+- **Configuración Agente 1**:
+  - Personalidad (campo libre)
+  - Postura sobre el tema
+- **Configuración Agente 2**:
+  - Personalidad (campo libre)
+  - Postura sobre el tema
+
+#### Funcionalidad
+- **Iniciar Conversación**: Requiere tema y posturas definidas
+- **Chat Dinámico**: Visualización de mensajes con avatares
+- **Continuar Conversación**: Genera nuevos turnos de diálogo
+- **Persistencia**: El historial se mantiene durante la sesión
+
+## 🧪 Desarrollo y Testing
+
+### Comandos de Desarrollo
+
+```bash
+# Ver todos los comandos disponibles
+make help
+
+# Configurar entorno de desarrollo
+make dev
+
+# Ejecutar la aplicación
+make local
+
+# Ejecutar tests
+make test
+
+# Tests con cobertura
+make test-cov
+
+# Linting y formateo
+make lint
+make format
+
+# Verificación de tipos
+make type-check
+
+# Ejecutar todas las verificaciones de calidad
+make quality
+
+# Limpiar archivos generados
+make clean
+```
+
+### Estructura de Testing
+
+- **Unit Tests**: Tests para funciones individuales
+- **Integration Tests**: Tests para componentes completos
+- **Mocking**: Simulación de APIs externas y Streamlit
+- **Coverage**: Reporte de cobertura de código
+
+### Herramientas de Calidad
+
+- **Ruff**: Linting rápido y moderno
+- **Black**: Formateo automático de código
+- **isort**: Organización de imports
+- **MyPy**: Verificación de tipos estáticos
+- **Pytest**: Framework de testing robusto
+
+## 🔧 Configuración Avanzada
+
+### Variables de Entorno
+```bash
+# .streamlit/secrets.toml
+GOOGLE_API_KEY = "tu_clave_gemini"
+
+# Opcional: configuración adicional
+MODEL_NAME = "gemini-1.5-flash"
+TEMPERATURE = 0.7
+MAX_MESSAGE_COUNT = 10
+```
+
+### Personalización de Agentes
+- Modifica `src/config.py` para cambiar nombres y avatares por defecto
+- Ajusta `src/gemini_agent.py` para personalizar prompts
+- Extiende `src/models.py` para nuevos tipos de datos
+
+## 🐛 Troubleshooting
+
+### Problemas Comunes
+
+1. **Error "ModuleNotFoundError"**:
+   ```bash
+   # Asegúrate de que el entorno virtual esté activado
+   source venv/bin/activate
+   make install
+   ```
+
+2. **Error de API Key**:
+   ```bash
+   # Verifica que el archivo secrets.toml existe y tiene la clave correcta
+   cat .streamlit/secrets.toml
+   ```
+
+3. **Puerto ocupado**:
+   ```bash
+   # Cambia el puerto en el Makefile o usa directamente
+   streamlit run Home.py --server.port=8503
+   ```
+
+4. **Errores de importación**:
+   ```bash
+   # Reinstala las dependencias
+   pip install -r requirements.txt --force-reinstall
+   ```
+
+### Logging y Debugging
+
+- Los logs se muestran en la consola durante la ejecución
+- Nivel de logging configurable en `src/utils.py`
+- Usa las herramientas de debugging de Streamlit: `st.write()`, `st.json()`
+
+## 🚀 Despliegue
+
+### Streamlit Cloud
+1. Sube el código a GitHub
+2. Conecta tu repositorio en [share.streamlit.io](https://share.streamlit.io)
+3. Configura los secrets en la interfaz web
+
+### Docker (Opcional)
+```bash
+# Construir imagen
+make docker-build
+
+# Ejecutar contenedor
+make docker-run
+```
+
+## 🤝 Contribución
+
+1. Fork el repositorio
+2. Crea una rama para tu feature (`git checkout -b feature/nueva-funcionalidad`)
+3. Ejecuta las verificaciones de calidad (`make quality`)
+4. Commit tus cambios (`git commit -am 'Añade nueva funcionalidad'`)
+5. Push a la rama (`git push origin feature/nueva-funcionalidad`)
+6. Crea un Pull Request
+
+### Estándares de Código
+
+- Seguir PEP 8 (verificado automáticamente con Ruff)
+- Documentar funciones con docstrings
+- Añadir tests para nuevas funcionalidades
+- Manejar errores apropiadamente
+- Usar type hints cuando sea posible
+
+## 📄 Licencia
+
+Este proyecto está bajo la licencia MIT. Ver el archivo `LICENSE` para más detalles.
+
+## 🙏 Agradecimientos
+
+- **Google Gemini**: Por proporcionar las capacidades de IA
+- **LangChain**: Por el framework de integración con LLMs
+- **Streamlit**: Por la plataforma de aplicaciones web
+- **Comunidad Python**: Por las excelentes herramientas de desarrollo
+
+## 📞 Soporte
+
+Para reportar bugs o solicitar nuevas funcionalidades, por favor:
+1. Revisa los issues existentes en GitHub
+2. Crea un nuevo issue con detalles específicos
+3. Incluye información del entorno y pasos para reproducir
+
+---
+
+**¡Disfruta creando discusiones fascinantes entre agentes periodistas! 🎉**
