@@ -1,9 +1,20 @@
-import streamlit as st
-import json
-from src.gemini_agent import GeminiTopicAgent
+"""Topics page for generating discussion topics and stances."""
 
+import streamlit as st
+
+from src.config import SessionKeys
+from src.exceptions import APIKeyError, TopicGenerationError
+from src.gemini_agent import GeminiTopicAgent
+from src.ui_components import TopicUIComponents, UIComponents
+from src.utils import setup_logging
+
+# Setup logging
+logger = setup_logging()
+
+# Page configuration
 st.set_page_config(page_title="Topics", page_icon="📝")
 
+# Page header
 st.markdown("# Temas")
 st.sidebar.header("Temas")
 
@@ -13,27 +24,47 @@ st.write(
     """
 )
 
-topic = st.text_input("Ingresa un tema para discusión")
 
-if st.button("Generar Tema"):
-    if topic:
+def handle_topic_generation(topic: str) -> None:
+    """Handle topic generation request.
+
+    Args:
+        topic: The input topic string.
+    """
+    if not topic.strip():
+        UIComponents.show_validation_error("Por favor, ingresa un tema.")
+        return
+
+    try:
         agent = GeminiTopicAgent()
         result = agent.generate_topic_and_stances(topic)
-        st.session_state.generated_topic = result
-    else:
-        st.warning("Por favor, ingresa un tema.")
+        st.session_state[SessionKeys.GENERATED_TOPIC] = result
+        logger.info(f"Successfully generated topic for: {topic}")
 
-if "generated_topic" in st.session_state:
-    result = st.session_state.generated_topic
-    st.text_area("Tema Mejorado", result["improved_topic"], height=100, disabled=True)
-    col1, col2 = st.columns(2)
-    with col1:
-        st.text_area("Postura 1", result["stance1"], height=200, disabled=True)
-    with col2:
-        st.text_area("Postura 2", result["stance2"], height=200, disabled=True)
+    except (TopicGenerationError, APIKeyError) as e:
+        UIComponents.show_error(str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error generating topic: {e}")
+        UIComponents.show_error("Error inesperado al generar el tema.")
 
-    if st.button("Guardar para Conversación"):
-        st.session_state.discussion_topic = result["improved_topic"]
-        st.session_state.agent1_stance = result["stance1"]
-        st.session_state.agent2_stance = result["stance2"]
-        st.success("¡Tema y posturas guardados para la conversación!")
+
+def main() -> None:
+    """Main function for the topics page."""
+    # Render topic input
+    topic, generate_clicked = TopicUIComponents.render_topic_input()
+
+    # Handle topic generation
+    if generate_clicked:
+        handle_topic_generation(topic)
+
+    # Render generated topic if available
+    generated_topic = st.session_state.get(SessionKeys.GENERATED_TOPIC)
+    if generated_topic:
+        save_clicked = TopicUIComponents.render_generated_topic(generated_topic)
+
+        if save_clicked:
+            TopicUIComponents.save_topic_to_conversation(generated_topic)
+
+
+if __name__ == "__main__":
+    main()
