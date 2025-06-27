@@ -160,7 +160,7 @@ cython_debug/
 .idea/
 
 # Streamlit secrets
-.streamlit/secrets.toml
+secrets.toml
 
 # SQLite file
 *.sqlite3
