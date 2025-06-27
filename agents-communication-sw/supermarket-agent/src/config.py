@@ -8,8 +8,8 @@ DEFAULT_AGENT_NAME = "Supermercado"
 DEFAULT_AGENT_AVATAR = "🛒"
 DEFAULT_PERSONALITY = "un amigable y servicial agente de supermercado"
 
-# API endpoints
-WHOLESALER_API_URL = "http://localhost:8080/restock"
+# A2A configuration
+WHOLESALER_A2A_URL = "http://localhost:8586"
 WHOLESALER_TIMEOUT = 30.0
 
 # MCP Server configuration
