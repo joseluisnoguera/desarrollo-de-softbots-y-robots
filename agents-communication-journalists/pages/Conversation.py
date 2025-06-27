@@ -68,9 +68,15 @@ def generate_new_conversation() -> None:
         # Clear regeneration flag
         st.session_state["_regenerating"] = False
         logger.info("Conversation started successfully")
+
+        # Force UI refresh to show sidebar and chat
+        st.rerun()
+
     except Exception as e:
         logger.error(f"Unexpected error starting conversation: {e}")
         UIComponents.show_error("Error inesperado al iniciar la conversación.")
+        st.session_state["_regenerating"] = False
+        st.rerun()
 
 
 def handle_continue_conversation() -> None:
@@ -85,6 +91,25 @@ def handle_continue_conversation() -> None:
         return
 
     try:
+        # Set flag to indicate we're continuing conversation
+        st.session_state["_continuing_conversation"] = True
+        st.rerun()  # Rerun to update UI immediately
+
+    except (ConversationError, APIKeyError) as e:
+        UIComponents.show_error(str(e))
+        st.session_state["_continuing_conversation"] = False
+    except Exception as e:
+        logger.error(f"Unexpected error continuing conversation: {e}")
+        UIComponents.show_error("Error inesperado al continuar la conversación.")
+        st.session_state["_continuing_conversation"] = False
+
+
+def continue_conversation_generation() -> None:
+    """Generate additional messages for continuing conversation."""
+    agent1 = st.session_state.get(SessionKeys.AGENT1)
+    agent2 = st.session_state.get(SessionKeys.AGENT2)
+
+    try:
         # Generate additional messages with streaming
         history = ConversationService.generate_and_append_messages_streaming(
             agent1=agent1,
@@ -95,14 +120,23 @@ def handle_continue_conversation() -> None:
         )
         st.session_state[SessionKeys.HISTORY] = history
 
+        # Clear the continuing flag
+        st.session_state["_continuing_conversation"] = False
+
         logger.info("Conversation continued successfully")
+
+        # Force UI refresh to show sidebar and updated chat
         st.rerun()
 
     except (ConversationError, APIKeyError) as e:
         UIComponents.show_error(str(e))
+        st.session_state["_continuing_conversation"] = False
+        st.rerun()
     except Exception as e:
         logger.error(f"Unexpected error continuing conversation: {e}")
         UIComponents.show_error("Error inesperado al continuar la conversación.")
+        st.session_state["_continuing_conversation"] = False
+        st.rerun()
 
 
 def main() -> None:
@@ -110,6 +144,11 @@ def main() -> None:
     # Check if we need to regenerate conversation after reset
     if st.session_state.get("_regenerating", False):
         generate_new_conversation()
+        return
+
+    # Check if we need to continue conversation
+    if st.session_state.get("_continuing_conversation", False):
+        continue_conversation_generation()
         return
 
     # Render sidebar configuration
@@ -120,10 +159,15 @@ def main() -> None:
         handle_start_conversation()
         return  # Exit to prevent rendering old messages
 
+    # Show loading message if continuing conversation
+    if st.session_state.get("_continuing_conversation", False):
+        st.info("🤖 Los agentes están generando más respuestas...")
+        return
+
     # Render chat messages
     UIComponents.render_chat_messages()
 
-    # Handle continue conversation
+    # Handle continue conversation (pass the continuing state)
     if UIComponents.render_continue_button():
         handle_continue_conversation()
 
