@@ -125,7 +125,7 @@ class ConversationService:
         turns: int,
         topic: str,
     ) -> str:
-        """Generate conversation messages with streaming responses and visual loaders.
+        """Generate conversation messages with direct addition to session state.
 
         Args:
             agent1: First agent.
@@ -144,77 +144,41 @@ class ConversationService:
             current_history = history
 
             # Import here to avoid circular imports
-            import time
-
-            from .config import (
-                AGENT1_AVATAR,
-                AGENT1_NAME,
-                AGENT2_AVATAR,
-                DEFAULT_AGENT1_NAME,
-                DEFAULT_AGENT2_NAME,
-            )
-            from .ui_components import UIComponents
-
-            # Inject CSS styles once at the beginning to ensure styling throughout streaming
-            UIComponents._inject_chat_styles()
+            from .config import AGENT1_NAME, AGENT2_NAME
 
             for turn in range(turns):
                 logger.info(f"Generating streaming turn {turn + 1}/{turns}")
 
-                # Agent 1 turn with streaming
+                # Agent 1 turn - generate complete response first
                 try:
-                    # Create single placeholder for Agent 1
-                    agent1_placeholder = st.empty()
-
-                    # Generate streaming response (no loader, direct streaming)
-                    response1 = ""
-                    for chunk in agent1.generate_response_stream(topic, current_history):
-                        response1 += chunk
-                        # Update with streaming message
-                        with agent1_placeholder.container():
-                            UIComponents._render_aligned_message(response1, AGENT1_AVATAR, DEFAULT_AGENT1_NAME, True)
-                        time.sleep(0.02)  # Small delay for better visual effect
-
-                    # Store final message
+                    response1 = agent1.generate_response(topic, current_history)
                     message1 = ChatMessage(role=AGENT1_NAME, content=response1)
                     st.session_state[SessionKeys.MESSAGES].append(message1.dict())
                     current_history += f"{AGENT1_NAME}: {response1}\n"
                     logger.debug(f"{AGENT1_NAME} response: {response1[:100]}...")
 
                 except Exception as e:
-                    logger.error(f"Failed to generate streaming response from {AGENT1_NAME}: {e}")
+                    logger.error(f"Failed to generate response from {AGENT1_NAME}: {e}")
                     raise ConversationError(
-                        f"Error generating streaming response from {AGENT1_NAME}: {e}"
+                        f"Error generating response from {AGENT1_NAME}: {e}"
                     ) from e
 
-                # Agent 2 turn with streaming
+                # Agent 2 turn - generate complete response first
                 try:
-                    # Create single placeholder for Agent 2
-                    agent2_placeholder = st.empty()
-
-                    # Generate streaming response (no loader, direct streaming)
-                    response2 = ""
-                    for chunk in agent2.generate_response_stream(topic, current_history):
-                        response2 += chunk
-                        # Update with streaming message
-                        with agent2_placeholder.container():
-                            UIComponents._render_aligned_message(response2, AGENT2_AVATAR, DEFAULT_AGENT2_NAME, False)
-                        time.sleep(0.02)  # Small delay for better visual effect
-
-                    # Store final message
+                    response2 = agent2.generate_response(topic, current_history)
                     message2 = ChatMessage(role=AGENT2_NAME, content=response2)
                     st.session_state[SessionKeys.MESSAGES].append(message2.dict())
                     current_history += f"{AGENT2_NAME}: {response2}\n"
                     logger.debug(f"{AGENT2_NAME} response: {response2[:100]}...")
 
                 except Exception as e:
-                    logger.error(f"Failed to generate streaming response from {AGENT2_NAME}: {e}")
+                    logger.error(f"Failed to generate response from {AGENT2_NAME}: {e}")
                     raise ConversationError(
-                        f"Error generating streaming response from {AGENT2_NAME}: {e}"
+                        f"Error generating response from {AGENT2_NAME}: {e}"
                     ) from e
 
             return current_history
 
         except Exception as e:
-            logger.error(f"Failed to generate streaming conversation: {e}")
-            raise ConversationError(f"Failed to generate streaming conversation: {e}") from e
+            logger.error(f"Failed to generate conversation: {e}")
+            raise ConversationError(f"Failed to generate conversation: {e}") from e

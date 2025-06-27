@@ -474,12 +474,18 @@ class UIComponents:
             bool: True if the continue button was clicked.
         """
         messages = st.session_state.get(SessionKeys.MESSAGES, [])
+        is_continuing = st.session_state.get("_continuing_conversation", False)
 
-        if messages:
+        if messages and not is_continuing:
             # Use columns to center the button
             _, col2, _ = st.columns([1, 2, 1])
             with col2:
                 return st.button("Continuar Conversación", use_container_width=True)
+        elif is_continuing:
+            # Show loading message instead of button
+            _, col2, _ = st.columns([1, 2, 1])
+            with col2:
+                st.info("🤖 Generando respuestas...")
         return False
 
     @staticmethod
